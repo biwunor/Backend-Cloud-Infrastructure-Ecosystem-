@@ -1,92 +1,36 @@
-# UW Help App
+# UW Help App - Deployment Configurations
 
-## Project Overview
+This repository contains the deployment configurations for the UW Help App to various cloud platforms:
 
-The UW Help App is designed to assist users in managing waste disposal efficiently. It provides features like waste disposal preferences, notifications, and user profiles.
+## Deployment Options
 
-## Features
+### 1. GitHub Pages
+- Configuration in `.github/workflows/github-pages-deploy.yml`
+- Automated deployment on push to the main branch
+- See `GITHUB_SECRETS.md` for required secrets
 
-- Onboarding screens for new users.
-- User authentication (Login, Register).
-- Dashboard with waste statistics and navigation.
-- Waste disposal preferences setup.
-- Notifications and user profile management.
+### 2. AWS S3 + CloudFront
+- Configuration in `.github/workflows/aws-deploy.yml`
+- Automated deployment on push to the main branch
+- See `GITHUB_SECRETS.md` for required secrets
 
-## Setup Instructions
+### 3. Netlify
+- Configuration in `.github/workflows/netlify-deploy.yml` and `netlify.toml`
+- Automated deployment on push to the main branch
+- See `GITHUB_SECRETS.md` for required secrets
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   ```
-2. Navigate to the project directory:
-   ```bash
-   cd uw-help-app
-   ```
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
+## Deployment Utility
 
-## Directory Structure
+The included `deploy.js` script provides an interactive CLI utility for manual deployments:
 
-```
-src/
-  components/
-    Authentication/
-      Login.jsx
-      Register.jsx
-      SignUpAs.jsx
-    Dashboard/
-      Dashboard.jsx
-      Notifications.jsx
-      ...
-    DisposeWaste/
-      Default.jsx
-    shared/
-      FooterNavBar.jsx
-      Header.jsx
-    ui/
-      select.jsx
-      button.jsx
-      ...
-  assets/
-    images/
-      uw-logo.png
-      ...
+```bash
+node deploy.js
 ```
 
-## Usage
+Select from the available deployment options.
 
-- Access the app at `http://localhost:3000` after starting the development server.
-- Navigate through the app using the footer navigation bar.
+## Documentation
 
-## Dependencies
-
-- React
-- React Router
-- Tailwind CSS
-
-## Contributing
-
-1. Fork the repository.
-2. Create a new branch:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-3. Commit your changes:
-   ```bash
-   git commit -m "Add your message here"
-   ```
-4. Push to the branch:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-5. Open a pull request.
-
-## License
-
-This project is licensed under the MIT License.
+- `DEPLOYMENT.md` - Comprehensive deployment guide
+- `DEPLOY-HELP.md` - Quick reference for deployment troubleshooting
+- `GITHUB_SECRETS.md` - Instructions for setting up required secrets
