@@ -1,1 +1,3 @@
-#!/bin/bash\nnode server-script.js
+#!/bin/bash
+echo "Starting UW Help App..."
+NODE_ENV=development npx tsx server/index.ts
