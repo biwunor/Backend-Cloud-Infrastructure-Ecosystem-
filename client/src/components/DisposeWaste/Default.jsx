@@ -3,13 +3,11 @@
 // - Provides a form with options for waste type and collection method.
 // - Submits the selected preferences to schedule a waste pickup.
 
-// This page displays the default empty waste disposal drop-down options form for the user. It includes a list of waste categories, a preview selection, and a personalization option. The user can select their state to see the relevant waste disposal options.
-
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import UwLogo from "../../assets/images/uw-logo2.png";
-import { HiOutlineMenu } from "react-icons/hi";
-import { FiMapPin } from "react-icons/fi";
+import { Bars3Icon } from "@heroicons/react/24/outline";
+import { MapPinIcon } from "@heroicons/react/24/solid";
 import {
   Select,
   SelectTrigger,
@@ -18,7 +16,7 @@ import {
   SelectLabel,
   SelectItem,
   SelectGroup,
-} from "@/components/ui/select";
+} from "../ui/select";
 
 const Default = () => {
   const navigate = useNavigate();
@@ -46,7 +44,7 @@ const Default = () => {
           <img src={UwLogo} alt="UW Logo" className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10" />
         </div>
         <button className="cursor-pointer">
-          <HiOutlineMenu className="w-6 h-6 text-black opacity-70 sm:w-8 sm:h-8 md:w-10 md:h-10" />
+          <Bars3Icon className="w-6 h-6 text-black opacity-70 sm:w-8 sm:h-8 md:w-10 md:h-10" />
         </button>
       </div>
 
@@ -54,7 +52,7 @@ const Default = () => {
         <div className="mt-6 text-center">
           <h1 className="text-2xl font-bold mb-3 sm:text-3xl md:text-4xl">Dispose Waste</h1>
           <p className="text-lg text-neutral-500 sm:text-xl md:text-2xl">
-            Let’s set up your waste disposal preferences
+            Let's set up your waste disposal preferences
           </p>
         </div>
 
@@ -69,7 +67,7 @@ const Default = () => {
                 <SelectValue
                   placeholder={
                     <div className="flex items-center gap-2">
-                      <FiMapPin className="w-5 h-5 text-neutral-500 sm:w-6 sm:h-6 md:w-7 md:h-7" />
+                      <MapPinIcon className="w-5 h-5 text-neutral-500 sm:w-6 sm:h-6 md:w-7 md:h-7" />
                       <span className="text-neutral-500 sm:text-base md:text-lg">Enter location</span>
                     </div>
                   }

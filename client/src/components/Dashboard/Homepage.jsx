@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react"; // Import useEffect
+import React, { useState, useEffect } from "react";
 import Header from "../shared/Header";
 import UserGreeting from "./UserGreeting";
 import SearchBar from "./SearchBar";

@@ -37,7 +37,7 @@ const Onboarding2 = () => {
           <img
             src={recyclingImage}
             alt="Recycling"
-            className="w-[80%] max-w-[400px] h-auto"
+            className="w-[80%] max-w-[400px] h-auto mx-auto"
           />
         </section>
         <section className="flex flex-col items-center">

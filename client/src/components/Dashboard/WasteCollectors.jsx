@@ -4,8 +4,8 @@ import TrashDisposal1 from "../../assets/images/trash-disposal1.png";
 import TrashDisposal2 from "../../assets/images/trash-disposal2.png";
 import TrashDisposal3 from "../../assets/images/trash-disposal3.png";
 import TrashDisposal4 from "../../assets/images/trash-disposal4.png";
-import { HiOutlineLocationMarker, HiDotsVertical } from "react-icons/hi";
-import { FaStar } from "react-icons/fa";
+import { MapPinIcon, EllipsisVerticalIcon } from "@heroicons/react/24/outline";
+import { StarIcon } from "@heroicons/react/24/solid";
 
 const WasteCollectors = () => {
   const collectors = [
@@ -48,17 +48,17 @@ const WasteCollectors = () => {
                     ? "Ugo group waste"
                     : "Ugo group waste disposal"}
                 </h1>
-                <HiDotsVertical className="text-black cursor-pointer sm:text-lg md:text-xl" />
+                <EllipsisVerticalIcon className="w-5 h-5 text-black cursor-pointer sm:w-6 sm:h-6 md:w-7 md:h-7" />
               </div>
               <p className="text-sm text-zinc-600 flex items-center mt-2 sm:text-base md:text-lg">
-                <HiOutlineLocationMarker className="mr-1 sm:text-lg md:text-xl" /> Rumeukpor, Port
+                <MapPinIcon className="w-4 h-4 mr-1 sm:w-5 sm:h-5 md:w-6 md:h-6" /> Rumeukpor, Port
                 Harcourt
               </p>
               <div className="flex mt-2">
                 {[1, 2, 3, 4, 5].map((star) => (
-                  <FaStar
+                  <StarIcon
                     key={star}
-                    className={`cursor-pointer sm:text-lg md:text-xl ${
+                    className={`w-4 h-4 cursor-pointer sm:w-5 sm:h-5 md:w-6 md:h-6 ${
                       ratings[collector.id] >= star
                         ? "text-yellow-300"
                         : "text-gray-300"

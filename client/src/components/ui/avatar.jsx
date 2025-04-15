@@ -1,45 +1,35 @@
-import * as React from "react"
-import * as AvatarPrimitive from "@radix-ui/react-avatar"
+import React from "react";
 
-import { cn } from "@/lib/utils"
-
-function Avatar({
-  className,
-  ...props
-}) {
+export const Avatar = ({ children, className }) => {
   return (
-    <AvatarPrimitive.Root
-      data-slot="avatar"
-      className={cn("relative flex size-8 shrink-0 overflow-hidden rounded-full", className)}
-      {...props} />
+    <div
+      className={`relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full ${
+        className || ""
+      }`}
+    >
+      {children}
+    </div>
   );
-}
+};
 
-function AvatarImage({
-  className,
-  ...props
-}) {
+export const AvatarImage = ({ src, alt, className }) => {
   return (
-    <AvatarPrimitive.Image
-      data-slot="avatar-image"
-      className={cn("aspect-square size-full", className)}
-      {...props} />
+    <img
+      src={src}
+      alt={alt}
+      className={`aspect-square h-full w-full object-cover ${className || ""}`}
+    />
   );
-}
+};
 
-function AvatarFallback({
-  className,
-  ...props
-}) {
+export const AvatarFallback = ({ children, className }) => {
   return (
-    <AvatarPrimitive.Fallback
-      data-slot="avatar-fallback"
-      className={cn(
-        "bg-muted flex size-full items-center justify-center rounded-full",
-        className
-      )}
-      {...props} />
+    <div
+      className={`flex h-full w-full items-center justify-center rounded-full bg-gray-200 text-gray-800 ${
+        className || ""
+      }`}
+    >
+      {children}
+    </div>
   );
-}
-
-export { Avatar, AvatarImage, AvatarFallback }
+};
