@@ -6,12 +6,12 @@ import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "YOUR_API_KEY",
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "YOUR_AUTH_DOMAIN",
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID",
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "YOUR_STORAGE_BUCKET",
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "YOUR_MESSAGING_SENDER_ID",
-  appId: process.env.REACT_APP_FIREBASE_APP_ID || "YOUR_APP_ID"
+  apiKey: "AIzaSyAc75lzWPr4e0AY43V_k0Dy_Ofz4A4FOFY",
+  authDomain: "urban-waste-help-6cb52.firebaseapp.com",
+  projectId: "urban-waste-help-6cb52",
+  storageBucket: "urban-waste-help-6cb52.firebasestorage.app",
+  messagingSenderId: "489957749468",
+  appId: "1:489957749468:web:9b150e6e013c5597157a19"
 };
 
 // Initialize Firebase

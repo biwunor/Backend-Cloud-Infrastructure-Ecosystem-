@@ -1,10 +1,15 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import * as path from "path";
+import * as fs from "fs";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Serve the UW Help App static files
+app.use(express.static(path.join(process.cwd(), 'client')));
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -56,6 +61,23 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
+  // Fallback route for the UW Help App
+  app.get('*', (req, res) => {
+    const indexPath = path.join(process.cwd(), 'client', 'index.html');
+    const fallbackPath = path.join(process.cwd(), 'client', 'fallback.html');
+    
+    if (fs.existsSync(indexPath)) {
+      console.log('Serving index.html');
+      res.sendFile(indexPath);
+    } else if (fs.existsSync(fallbackPath)) {
+      console.log('Serving fallback.html');
+      res.sendFile(fallbackPath);
+    } else {
+      console.log('Serving text response');
+      res.send('EcoWaste Manager app is starting up...');
+    }
+  });
+
   // ALWAYS serve the app on port 5000
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
@@ -65,6 +87,6 @@ app.use((req, res, next) => {
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
-    log(`serving on port ${port}`);
+    log(`serving UW Help App on port ${port} at http://0.0.0.0:${port}`);
   });
 })();

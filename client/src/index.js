@@ -9,7 +9,7 @@ import "./App.css";
 
 const CLIENT_ID = "751807253098-0uvptb6cqi8a3iuqahmppvcseh7o7onl.apps.googleusercontent.com";
 
-createRoot(document.getElementById("root")!).render(
+createRoot(document.getElementById("root")).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <GoogleOAuthProvider clientId={CLIENT_ID}>
