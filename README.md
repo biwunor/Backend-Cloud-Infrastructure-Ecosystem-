@@ -1,146 +1,92 @@
 # UW Help App
 
-A comprehensive waste management platform designed specifically for the University of Washington community, enabling sustainable disposal practices through innovative digital tools.
+## Project Overview
 
-## Key Components
+The UW Help App is designed to assist users in managing waste disposal efficiently. It provides features like waste disposal preferences, notifications, and user profiles.
 
-- React.js frontend
-- Interactive mapping of disposal locations
-- User profile system
-- Waste tracking and scheduling capabilities
-- Community-focused waste reduction features
+## Features
 
-## Prerequisites
+- Onboarding screens for new users.
+- User authentication (Login, Register).
+- Dashboard with waste statistics and navigation.
+- Waste disposal preferences setup.
+- Notifications and user profile management.
 
-- Node.js (v16 or higher)
-- npm or yarn
-- Firebase account (for authentication and database)
-
-## Getting Started
+## Setup Instructions
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/uw-help-app.git
+   git clone <repository-url>
+   ```
+2. Navigate to the project directory:
+   ```bash
    cd uw-help-app
    ```
-
-2. Install dependencies:
+3. Install dependencies:
    ```bash
    npm install
    ```
-
-3. Create a `.env` file in the root directory with your Firebase configuration (see `.env.example` for required variables)
-
 4. Start the development server:
    ```bash
    npm run dev
    ```
 
-5. Open your browser and navigate to `http://localhost:5173`
-
-## Building for Production
-
-To create a production build:
-
-```bash
-npm run build
-```
-
-The built files will be in the `dist` directory.
-
-To preview the production build locally:
-
-```bash
-npm run preview
-```
-
-## Deployment Options
-
-This project supports multiple deployment options:
-
-### GitHub Pages
-
-To deploy to GitHub Pages:
-
-```bash
-npm run deploy
-```
-
-See [DEPLOY-HELP.md](./DEPLOY-HELP.md) for more details.
-
-### AWS S3 + CloudFront
-
-Automated deployment to AWS S3 and CloudFront is configured using GitHub Actions.
-
-See [DEPLOY-HELP.md](./DEPLOY-HELP.md) and [GITHUB_SECRETS.md](./GITHUB_SECRETS.md) for setup instructions.
-
-### Netlify
-
-Deployment to Netlify is also supported through GitHub Actions or the Netlify CLI.
-
-See [DEPLOY-HELP.md](./DEPLOY-HELP.md) and [GITHUB_SECRETS.md](./GITHUB_SECRETS.md) for configuration details.
-
-## Deployment Utility
-
-A deployment utility script is included to simplify the deployment process:
-
-```bash
-node deploy.js
-```
-
-This script provides an interactive menu for different deployment options.
-
-## Project Structure
+## Directory Structure
 
 ```
-uw-help-app/
-├── public/              # Static files
-│   ├── 404.html         # Custom 404 page
-│   └── uw-favicon.png   # Favicon
-├── src/
-│   ├── assets/          # Images and other assets
-│   ├── components/      # React components
-│   │   ├── Dashboard/   # Dashboard related components
-│   │   ├── DisposeWaste/# Waste disposal components
-│   │   ├── SplashScreen/# Splash screen components
-│   │   ├── authentication/ # Authentication components
-│   │   ├── shared/      # Shared components
-│   │   └── ui/          # UI components (buttons, forms, etc.)
-│   ├── lib/             # Utility functions
-│   ├── App.jsx          # Main App component
-│   ├── App.css          # App styles
-│   ├── firebase.js      # Firebase configuration
-│   ├── index.css        # Global styles
-│   └── main.jsx         # Entry point
-├── .env.example         # Example environment variables
-├── .github/workflows/   # GitHub Actions workflows
-├── netlify.toml         # Netlify configuration
-├── package.json         # Project metadata and dependencies
-└── vite.config.js       # Vite configuration
+src/
+  components/
+    Authentication/
+      Login.jsx
+      Register.jsx
+      SignUpAs.jsx
+    Dashboard/
+      Dashboard.jsx
+      Notifications.jsx
+      ...
+    DisposeWaste/
+      Default.jsx
+    shared/
+      FooterNavBar.jsx
+      Header.jsx
+    ui/
+      select.jsx
+      button.jsx
+      ...
+  assets/
+    images/
+      uw-logo.png
+      ...
 ```
 
-## Environment Variables
+## Usage
 
-This project uses environment variables for configuration. See `.env.example` for the required variables.
+- Access the app at `http://localhost:3000` after starting the development server.
+- Navigate through the app using the footer navigation bar.
 
-In development, you can create a `.env` file in the project root with your actual values.
+## Dependencies
 
-For production deployments, set these environment variables in your deployment platform (GitHub, AWS, Netlify).
-
-## CI/CD
-
-Continuous Integration and Continuous Deployment are set up with GitHub Actions:
-
-- `.github/workflows/github-pages-deploy.yml` - Deploys to GitHub Pages
-- `.github/workflows/aws-deploy.yml` - Deploys to AWS S3 and CloudFront
-- `.github/workflows/netlify-deploy.yml` - Deploys to Netlify
-
-See [GITHUB_SECRETS.md](./GITHUB_SECRETS.md) for information on setting up the required secrets.
-
-## License
-
-[MIT](LICENSE)
+- React
+- React Router
+- Tailwind CSS
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Fork the repository.
+2. Create a new branch:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+3. Commit your changes:
+   ```bash
+   git commit -m "Add your message here"
+   ```
+4. Push to the branch:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+5. Open a pull request.
+
+## License
+
+This project is licensed under the MIT License.
