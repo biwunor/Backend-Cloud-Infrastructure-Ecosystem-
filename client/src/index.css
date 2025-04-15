@@ -3,59 +3,75 @@
 @tailwind utilities;
 
 :root {
-  --color-background: #ffffff;
-  --color-foreground: #0f172a;
-  --color-card: #ffffff;
-  --color-card-foreground: #0f172a;
-  --color-popover: #ffffff;
-  --color-popover-foreground: #0f172a;
-  --color-primary: #1a5336;
-  --color-primary-foreground: #f8fafc;
-  --color-secondary: #f1f5f9;
-  --color-secondary-foreground: #0f172a;
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #64748b;
-  --color-accent: #f1f5f9;
-  --color-accent-foreground: #0f172a;
-  --color-destructive: #ef4444;
-  --color-destructive-foreground: #f8fafc;
-  --color-border: #e2e8f0;
-  --color-input: #e2e8f0;
-  --color-ring: #1a5336;
-  --radius-sm: 0.125rem;
-  --radius-md: 0.25rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 1rem;
+  /* UW color palette */
+  --uw-purple: #4b2e83;
+  --uw-gold: #b7a57a;
+  --uw-metallic-gold: #85754d;
+  --uw-light-gray: #d9d9d9;
+  --uw-dark-gray: #444444;
+  
+  /* Environmental colors */
+  --env-green: #1a8754;
+  --env-light-green: #44a87f;
+  --env-lighter-green: #c6e5d9;
+  --env-blue: #4b9cd3;
+  --env-brown: #8a6d3b;
+  
+  /* Theme colors */
+  --color-primary: var(--env-green);
+  --color-primary-light: var(--env-light-green);
+  --color-primary-dark: #0d6d3e;
+  --color-accent: var(--uw-gold);
+  --color-accent-dark: var(--uw-metallic-gold);
+  --color-text: #333333;
+  --color-text-light: #666666;
+  --color-background: #f5f5f5;
+  --color-white: #ffffff;
+  --color-success: #2ecc71;
+  --color-warning: #f39c12;
+  --color-error: #e74c3c;
+  --color-info: var(--env-blue);
+  
+  /* Font settings */
+  font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.dark {
-  --color-background: #0f172a;
-  --color-foreground: #f8fafc;
-  --color-card: #1e293b;
-  --color-card-foreground: #f8fafc;
-  --color-popover: #1e293b;
-  --color-popover-foreground: #f8fafc;
-  --color-primary: #2a9d59;
-  --color-primary-foreground: #f8fafc;
-  --color-secondary: #334155;
-  --color-secondary-foreground: #f8fafc;
-  --color-muted: #334155;
-  --color-muted-foreground: #94a3b8;
-  --color-accent: #334155;
-  --color-accent-foreground: #f8fafc;
-  --color-destructive: #ef4444;
-  --color-destructive-foreground: #f8fafc;
-  --color-border: #334155;
-  --color-input: #334155;
-  --color-ring: #2a9d59;
-}
-
+/* Set basic styling */
 body {
   margin: 0;
   padding: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
   background-color: var(--color-background);
-  color: var(--color-foreground);
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+/* Container styling */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+/* Make focus outlines more visible for accessibility */
+*:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Custom classes */
+.btn-primary {
+  @apply bg-green-700 text-white px-4 py-2 rounded-md hover:bg-green-800 transition-colors;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors;
+}
+
+.card {
+  @apply bg-white rounded-xl shadow p-4;
 }

@@ -1,14 +1,32 @@
-import { spawn } from 'child_process';
+import express from 'express';
+import { createServer } from 'http';
+import { setupVite, serveStatic } from './server/vite.js';
+import { registerRoutes } from './server/routes.js';
 
-// Use npm run dev command to start the Vite development server
-console.log('Starting Vite development server...');
-const viteProcess = spawn('npm', ['run', 'dev'], {
-  stdio: 'inherit',
-  shell: true,
+async function createServer() {
+  const app = express();
+  const httpServer = createServer(app);
+
+  // Setup API routes
+  await registerRoutes(app);
+  
+  // Serve static files in production
+  if (process.env.NODE_ENV === 'production') {
+    serveStatic(app);
+  } else {
+    // Setup Vite in development mode
+    await setupVite(app, httpServer);
+  }
+
+  const PORT = process.env.PORT || 3000;
+  httpServer.listen(PORT, () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  });
+  
+  return httpServer;
+}
+
+createServer().catch(err => {
+  console.error('Error starting server:', err);
+  process.exit(1);
 });
-
-viteProcess.on('error', (error) => {
-  console.error('Failed to start Vite server:', error);
-});
-
-console.log('Server should be starting up...');
