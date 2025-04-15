@@ -1,40 +1,75 @@
-// Simple Express server to serve the UW Help App
-import express from 'express';
-import { createServer as createHttpServer } from 'http';
+import http from 'http';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function createServer() {
-  const app = express();
-  const server = createHttpServer(app);
+const PORT = process.env.PORT || 3000;
+const DIST_DIR = path.join(__dirname, 'dist');
+
+const server = http.createServer((req, res) => {
+  let filePath = path.join(DIST_DIR, req.url === '/' ? 'index.html' : req.url);
   
-  // Serve static files from the client directory
-  app.use(express.static(path.join(__dirname, 'client')));
-
-  // API endpoint to check server status
-  app.get('/api/status', (req, res) => {
-    res.json({ status: 'ok', message: 'UW Help App server is running' });
+  // Make sure file paths remain inside the dist directory
+  if (!filePath.startsWith(DIST_DIR)) {
+    res.statusCode = 403;
+    res.end('Forbidden');
+    return;
+  }
+  
+  // Determine content type
+  const extname = path.extname(filePath);
+  let contentType = 'text/html';
+  
+  switch (extname) {
+    case '.js':
+      contentType = 'text/javascript';
+      break;
+    case '.css':
+      contentType = 'text/css';
+      break;
+    case '.json':
+      contentType = 'application/json';
+      break;
+    case '.png':
+      contentType = 'image/png';
+      break;
+    case '.jpg':
+    case '.jpeg':
+      contentType = 'image/jpeg';
+      break;
+    case '.svg':
+      contentType = 'image/svg+xml';
+      break;
+  }
+  
+  // Read file
+  fs.readFile(filePath, (err, content) => {
+    if (err) {
+      if (err.code === 'ENOENT') {
+        // If the requested file is not found, try to serve index.html for SPA routing
+        fs.readFile(path.join(DIST_DIR, 'index.html'), (err, content) => {
+          if (err) {
+            res.statusCode = 500;
+            res.end('Server Error');
+          } else {
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(content, 'utf-8');
+          }
+        });
+      } else {
+        res.statusCode = 500;
+        res.end(`Server Error: ${err.code}`);
+      }
+    } else {
+      res.writeHead(200, { 'Content-Type': contentType });
+      res.end(content, 'utf-8');
+    }
   });
+});
 
-  // Serve the index.html for all other routes (SPA support)
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'client', 'index.html'));
-  });
-
-  // Start the server on port 5000 (Replit default)
-  const PORT = process.env.PORT || 5000;
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`UW Help App server running on port ${PORT}`);
-    console.log(`Visit http://localhost:${PORT} in your browser`);
-  });
-
-  return server;
-}
-
-// Start the server
-createServer().catch(err => {
-  console.error('Failed to start server:', err);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running at http://0.0.0.0:${PORT}/`);
 });

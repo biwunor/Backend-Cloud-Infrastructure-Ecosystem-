@@ -1,11 +1,13 @@
-// This script is used to start the UW Help App in a Replit workflow
-console.log('Starting UW Help App...');
+// Simple script to start the development workflow
+const { execSync } = require('child_process');
 
-// Set environment variable for development
-process.env.NODE_ENV = 'development';
+console.log('Starting development workflow...');
 
-// Import server entry point
-import('./server/index.ts').catch(err => {
-  console.error('Failed to start the application:', err);
+try {
+  // Start the Vite development server
+  console.log('Starting Vite development server...');
+  execSync('npm run dev', { stdio: 'inherit' });
+} catch (error) {
+  console.error('Error starting development workflow:', error);
   process.exit(1);
-});
+}
