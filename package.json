@@ -1,0 +1,17 @@
+{
+  "name": "uw-help-app",
+  "homepage": "https://devbydijah.github.io/uw-help-app/",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'Build placeholder'",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.1.1",
+    "dotenv": "^16.5.0",
+    "gh-pages": "^6.3.0"
+  }
+}

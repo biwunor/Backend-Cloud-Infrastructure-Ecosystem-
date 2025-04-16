@@ -1,0 +1,98 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-uwhelplapp-dev-123456-authRole",
+      "UnauthRoleArn": "arn:aws:iam::123456789012:role/amplify-uwhelplapp-dev-123456-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::123456789012:role/amplify-uwhelplapp-dev-123456-authRole",
+      "Region": "us-west-2",
+      "DeploymentBucketName": "amplify-uwhelplapp-dev-123456-deployment",
+      "UnauthRoleName": "amplify-uwhelplapp-dev-123456-unauthRole",
+      "StackName": "amplify-uwhelplapp-dev-123456",
+      "StackId": "arn:aws:cloudformation:us-west-2:123456789012:stack/amplify-uwhelplapp-dev-123456/xxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "AmplifyAppId": "d1xxxxxxxxxx"
+    },
+    "categories": {
+      "auth": {
+        "uwHelpApp": {}
+      },
+      "function": {
+        "wasteManagementFunction": {
+          "deploymentBucketName": "amplify-uwhelplapp-dev-123456-deployment",
+          "s3Key": "amplify-builds/wasteManagementFunction-xx-xx-xx.zip"
+        }
+      },
+      "api": {
+        "uwHelpAppApi": {}
+      },
+      "storage": {
+        "wasteManagementData": {},
+        "wasteStorageS3": {},
+        "wasteManagementRDS": {}
+      }
+    }
+  },
+  "staging": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-uwhelplapp-staging-123456-authRole",
+      "UnauthRoleArn": "arn:aws:iam::123456789012:role/amplify-uwhelplapp-staging-123456-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::123456789012:role/amplify-uwhelplapp-staging-123456-authRole",
+      "Region": "us-west-2",
+      "DeploymentBucketName": "amplify-uwhelplapp-staging-123456-deployment",
+      "UnauthRoleName": "amplify-uwhelplapp-staging-123456-unauthRole",
+      "StackName": "amplify-uwhelplapp-staging-123456",
+      "StackId": "arn:aws:cloudformation:us-west-2:123456789012:stack/amplify-uwhelplapp-staging-123456/xxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "AmplifyAppId": "d1xxxxxxxxxx"
+    },
+    "categories": {
+      "auth": {
+        "uwHelpApp": {}
+      },
+      "function": {
+        "wasteManagementFunction": {
+          "deploymentBucketName": "amplify-uwhelplapp-staging-123456-deployment",
+          "s3Key": "amplify-builds/wasteManagementFunction-xx-xx-xx.zip"
+        }
+      },
+      "api": {
+        "uwHelpAppApi": {}
+      },
+      "storage": {
+        "wasteManagementData": {},
+        "wasteStorageS3": {},
+        "wasteManagementRDS": {}
+      }
+    }
+  },
+  "prod": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-uwhelplapp-prod-123456-authRole",
+      "UnauthRoleArn": "arn:aws:iam::123456789012:role/amplify-uwhelplapp-prod-123456-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::123456789012:role/amplify-uwhelplapp-prod-123456-authRole",
+      "Region": "us-west-2",
+      "DeploymentBucketName": "amplify-uwhelplapp-prod-123456-deployment",
+      "UnauthRoleName": "amplify-uwhelplapp-prod-123456-unauthRole",
+      "StackName": "amplify-uwhelplapp-prod-123456",
+      "StackId": "arn:aws:cloudformation:us-west-2:123456789012:stack/amplify-uwhelplapp-prod-123456/xxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "AmplifyAppId": "d1xxxxxxxxxx"
+    },
+    "categories": {
+      "auth": {
+        "uwHelpApp": {}
+      },
+      "function": {
+        "wasteManagementFunction": {
+          "deploymentBucketName": "amplify-uwhelplapp-prod-123456-deployment",
+          "s3Key": "amplify-builds/wasteManagementFunction-xx-xx-xx.zip"
+        }
+      },
+      "api": {
+        "uwHelpAppApi": {}
+      },
+      "storage": {
+        "wasteManagementData": {},
+        "wasteStorageS3": {},
+        "wasteManagementRDS": {}
+      }
+    }
+  }
+}

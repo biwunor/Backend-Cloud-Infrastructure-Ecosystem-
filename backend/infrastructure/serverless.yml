@@ -1,0 +1,362 @@
+service: uw-waste-management-api
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  architecture: arm64
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-west-2'}
+  memorySize: 512
+  timeout: 30
+  logRetentionInDays: 30
+  environment:
+    STAGE: ${self:provider.stage}
+    DYNAMODB_TABLE: ${self:service}-${self:provider.stage}
+    JWT_SECRET: ${param:jwtSecret, env:JWT_SECRET, 'dev-jwt-secret-replace-in-prod'}
+    LOG_LEVEL: ${param:logLevel, env:LOG_LEVEL, 'info'}
+    NODE_ENV: ${opt:stage, 'dev'}
+  
+  httpApi:
+    cors: true
+    metrics: true
+  
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:BatchGetItem
+            - dynamodb:BatchWriteItem
+          Resource:
+            - !GetAtt WasteTable.Arn
+            - !Join ['', [!GetAtt WasteTable.Arn, '/index/*']]
+            - !GetAtt LocationsTable.Arn
+            - !Join ['', [!GetAtt LocationsTable.Arn, '/index/*']]
+            - !GetAtt UsersTable.Arn
+            - !Join ['', [!GetAtt UsersTable.Arn, '/index/*']]
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: 'arn:aws:logs:*:*:*'
+        - Effect: Allow
+          Action:
+            - cloudwatch:PutMetricData
+          Resource: '*'
+
+custom:
+  dynamodb:
+    stages:
+      - dev
+      - local
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+      seed: true
+
+  alerts:
+    stages:
+      - prod
+      - staging
+    dashboards: true
+    alarms:
+      - name: api-errors
+        namespace: 'AWS/Lambda'
+        metric: Errors
+        threshold: 5
+        period: 60
+        evaluationPeriods: 1
+        comparisonOperator: GreaterThanOrEqualToThreshold
+        pattern: '{$.level = "error"}'
+        treatMissingData: notBreaching
+      - name: api-throttles
+        namespace: 'AWS/Lambda'
+        metric: Throttles
+        threshold: 5
+        period: 60
+        evaluationPeriods: 1
+        comparisonOperator: GreaterThanOrEqualToThreshold
+        treatMissingData: notBreaching
+      - name: api-duration-p90
+        namespace: 'AWS/Lambda'
+        metric: Duration
+        threshold: 5000
+        statistic: p90
+        period: 60
+        evaluationPeriods: 1
+        comparisonOperator: GreaterThanOrEqualToThreshold
+        treatMissingData: notBreaching
+
+  prune:
+    automatic: true
+    number: 3
+
+  apiGatewayThrottling:
+    maxRequestsPerSecond: 100
+    maxConcurrentRequests: 50
+
+  warmup:
+    enabled: true
+    prewarm: true
+    concurrency: 5
+    events:
+      - schedule: 'rate(5 minutes)'
+
+  splitStacks:
+    perFunction: true
+    perType: true
+
+functions:
+  # Auth functions
+  auth:
+    handler: api/routes/auth.handler
+    events:
+      - httpApi:
+          path: /auth/login
+          method: post
+      - httpApi:
+          path: /auth/register
+          method: post
+      - httpApi:
+          path: /auth/refresh
+          method: post
+
+  # User management
+  users:
+    handler: api/routes/users.handler
+    events:
+      - httpApi:
+          path: /users
+          method: get
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /users/{id}
+          method: get
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /users/{id}
+          method: put
+          authorizer:
+            name: jwtAuthorizer
+
+  # Waste management
+  waste:
+    handler: api/routes/waste.handler
+    events:
+      - httpApi:
+          path: /waste
+          method: get
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /waste/{id}
+          method: get
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /waste
+          method: post
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /waste/{id}
+          method: put
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /waste/{id}
+          method: delete
+          authorizer:
+            name: jwtAuthorizer
+
+  # Locations management
+  locations:
+    handler: api/routes/locations.handler
+    events:
+      - httpApi:
+          path: /locations
+          method: get
+      - httpApi:
+          path: /locations/{id}
+          method: get
+      - httpApi:
+          path: /locations
+          method: post
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /locations/{id}
+          method: put
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /locations/{id}
+          method: delete
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /locations/type/{type}
+          method: get
+
+  # Data processing
+  processWasteData:
+    handler: api/waste-data.processWasteData
+    timeout: 300
+    memorySize: 1024
+    events:
+      - schedule: rate(1 day)
+    environment:
+      PROCESSING_BATCH_SIZE: 100
+
+  # Authorizer
+  authorizer:
+    handler: middleware/auth.authorize
+
+resources:
+  Resources:
+    WasteTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}-waste
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+          - AttributeName: wasteType
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: createdAt-index
+            KeySchema:
+              - AttributeName: createdAt
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: wasteType-index
+            KeySchema:
+              - AttributeName: wasteType
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: userId-index
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+
+    LocationsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}-locations
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: locationType
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: locationType-index
+            KeySchema:
+              - AttributeName: locationType
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}-users
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: email-index
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+
+    ApiGatewayLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: /aws/apigateway/${self:service}-${self:provider.stage}
+        RetentionInDays: ${self:provider.logRetentionInDays}
+
+    CloudWatchAlarmTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        DisplayName: ${self:service}-${self:provider.stage}-alarms
+        TopicName: ${self:service}-${self:provider.stage}-alarms
+
+  Outputs:
+    ApiGatewayUrl:
+      Description: API Gateway URL
+      Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+    UserTableName:
+      Description: User DynamoDB Table Name
+      Value: !Ref UsersTable
+    WasteTableName:
+      Description: Waste DynamoDB Table Name
+      Value: !Ref WasteTable
+    LocationsTableName:
+      Description: Locations DynamoDB Table Name
+      Value: !Ref LocationsTable
+    CloudWatchAlarmTopicArn:
+      Description: SNS Topic ARN for CloudWatch Alarms
+      Value: !Ref CloudWatchAlarmTopic
+
+plugins:
+  - serverless-dynamodb-local
+  - serverless-offline
+  - serverless-webpack
+  - serverless-domain-manager
+  - serverless-plugin-aws-alerts
+  - serverless-prune-plugin
+  - serverless-api-gateway-throttling
+  - serverless-plugin-warmup
+  - serverless-plugin-split-stacks
+  - serverless-plugin-canary-deployments

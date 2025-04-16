@@ -1,0 +1,9 @@
+{
+  "lambdaLayers": [],
+  "environmentVariables": {
+    "STORAGE_WASTEMANAGEMENTDATA_NAME": "wasteManagementData",
+    "STORAGE_WASTEMANAGEMENTDATA_ARN": {
+      "Ref": "GetAtt:wasteManagementData:Arn"
+    }
+  }
+}

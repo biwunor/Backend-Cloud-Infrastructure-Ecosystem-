@@ -1,0 +1,39 @@
+version: 1
+backend:
+  phases:
+    preBuild:
+      commands:
+        - npm install -g @aws-amplify/cli
+    build:
+      commands:
+        - amplifyPush --simple
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - yarn install
+    build:
+      commands:
+        - yarn run build
+  artifacts:
+    baseDirectory: build
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - $(npm root -g)/**/*
+test:
+  phases:
+    preTest:
+      commands:
+        - npm ci
+        - npm install -g jest
+    test:
+      commands:
+        - npm test
+  artifacts:
+    baseDirectory: coverage
+    files:
+      - '**/*'
+    configFilePath: '**/jest-*.json'

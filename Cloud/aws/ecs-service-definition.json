@@ -1,0 +1,57 @@
+{
+  "cluster": "uw-waste-management-${ENVIRONMENT}",
+  "serviceName": "uw-waste-management-service-${ENVIRONMENT}",
+  "taskDefinition": "uw-waste-management:${TASK_REVISION}",
+  "loadBalancers": [
+    {
+      "targetGroupArn": "${TARGET_GROUP_ARN}",
+      "containerName": "frontend",
+      "containerPort": 80
+    },
+    {
+      "targetGroupArn": "${API_TARGET_GROUP_ARN}",
+      "containerName": "backend",
+      "containerPort": 3000
+    }
+  ],
+  "desiredCount": ${DESIRED_COUNT},
+  "launchType": "FARGATE",
+  "platformVersion": "LATEST",
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 50
+  },
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": ${SUBNET_IDS},
+      "securityGroups": ${SECURITY_GROUP_IDS},
+      "assignPublicIp": "ENABLED"
+    }
+  },
+  "healthCheckGracePeriodSeconds": 120,
+  "schedulingStrategy": "REPLICA",
+  "enableECSManagedTags": true,
+  "propagateTags": "SERVICE",
+  "enableExecuteCommand": ${ENABLE_EXECUTE_COMMAND},
+  "serviceRegistries": [
+    {
+      "registryArn": "${SERVICE_DISCOVERY_ARN}",
+      "containerName": "backend",
+      "containerPort": 3000
+    }
+  ],
+  "tags": [
+    {
+      "key": "Project",
+      "value": "UW-Waste-Management"
+    },
+    {
+      "key": "Environment",
+      "value": "${ENVIRONMENT}"
+    }
+  ]
+}

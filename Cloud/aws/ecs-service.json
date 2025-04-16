@@ -1,0 +1,52 @@
+{
+  "cluster": "uw-waste-management-ENVIRONMENT",
+  "serviceName": "uw-waste-management-app",
+  "taskDefinition": "uw-waste-management:REVISION",
+  "loadBalancers": [
+    {
+      "targetGroupArn": "arn:aws:elasticloadbalancing:REGION:ACCOUNT_ID:targetgroup/uw-waste-app/TARGET_GROUP_ID",
+      "containerName": "app",
+      "containerPort": 3000
+    }
+  ],
+  "desiredCount": 2,
+  "launchType": "FARGATE",
+  "platformVersion": "LATEST",
+  "deploymentConfiguration": {
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 100,
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    }
+  },
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": [
+        "subnet-XXXXXXXX",
+        "subnet-YYYYYYYY"
+      ],
+      "securityGroups": [
+        "sg-ZZZZZZZZ"
+      ],
+      "assignPublicIp": "ENABLED"
+    }
+  },
+  "schedulingStrategy": "REPLICA",
+  "deploymentController": {
+    "type": "ECS"
+  },
+  "enableECSManagedTags": true,
+  "propagateTags": "SERVICE",
+  "tags": [
+    {
+      "key": "Project",
+      "value": "UW-Waste-Management"
+    },
+    {
+      "key": "Environment",
+      "value": "ENVIRONMENT"
+    }
+  ],
+  "enableExecuteCommand": true
+}
