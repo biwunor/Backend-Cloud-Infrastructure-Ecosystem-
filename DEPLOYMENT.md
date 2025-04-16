@@ -1,489 +1,201 @@
-# UW Waste Management App Deployment Guide
+# Deployment Guide
 
-This document provides comprehensive deployment instructions for the UW Waste Management App to various cloud platforms.
+This document provides instructions for deploying the UW Help App to AWS using the advanced build, deployment, and hosting solution with custom domain name integration.
 
-## Table of Contents
+## Architecture Overview
 
-1. [Preparing for Deployment](#preparing-for-deployment)
-2. [GitHub Pages Deployment](#github-pages-deployment) (Frontend Only)
-3. [AWS S3 and CloudFront Deployment](#aws-s3-and-cloudfront-deployment) (Frontend)
-4. [AWS Lambda Serverless Deployment](#aws-lambda-serverless-deployment) (Backend)
-5. [AWS ECS Docker Deployment](#aws-ecs-docker-deployment) (Full Stack)
-6. [Netlify Deployment](#netlify-deployment) (Frontend Only)
-7. [Docker Deployment](#docker-deployment) (Development & Production)
-8. [Environment Variables](#environment-variables)
-9. [Continuous Integration/Continuous Deployment (CI/CD)](#continuous-integrationcontinuous-deployment-cicd)
-10. [Infrastructure as Code](#infrastructure-as-code)
-11. [Troubleshooting](#troubleshooting)
+The application is deployed using a modern cloud-native architecture:
 
-## Preparing for Deployment
+- **Frontend/Backend**: Containerized Node.js application
+- **Container Orchestration**: AWS ECS Fargate
+- **Database**: AWS DynamoDB
+- **CDN**: AWS CloudFront
+- **DNS Management**: AWS Route 53
+- **SSL Certificates**: AWS Certificate Manager
+- **Infrastructure as Code**: Terraform
+- **CI/CD Pipeline**: GitHub Actions
 
-Before deploying the application, ensure:
+![Architecture Diagram](https://excalidraw.com/--placeholder--for-architecture-diagram)
 
-1. Your code is working correctly in local development
-2. All required environment variables are set up (see [Environment Variables](#environment-variables))
-3. You have run `npm run build` to create a production build
-4. You have the necessary accounts and permissions for your chosen deployment platform
+## Prerequisites
 
-## GitHub Pages Deployment
+Before deployment, ensure you have:
 
-### Manual Deployment
+1. An AWS account with appropriate permissions
+2. A registered domain name (for production deployment)
+3. GitHub repository with the application code
+4. AWS CLI installed and configured locally
+5. Terraform CLI installed locally (v1.0.0+)
+6. Docker installed locally (for testing)
 
-1. Make sure the `homepage` field in `package.json` is set correctly:
-   ```json
-   "homepage": "https://<username>.github.io/<repository-name>"
-   ```
+## Required AWS Permissions
 
-2. Run the deployment command:
+For deployment, you'll need an IAM role with the following permissions:
+
+- AmazonECR-FullAccess
+- AmazonECS-FullAccess
+- AmazonDynamoDBFullAccess
+- AmazonRoute53FullAccess
+- AmazonCloudFrontFullAccess
+- AmazonS3FullAccess
+- AmazonVPCFullAccess
+- AWSCertificateManagerFullAccess
+- CloudWatchFullAccess
+- IAMFullAccess (or a custom policy with required IAM permissions)
+- AmazonSSMFullAccess (for securely managing secrets)
+
+## Required GitHub Secrets
+
+Add the following secrets to your GitHub repository:
+
+- `AWS_ROLE_TO_ASSUME`: ARN of the IAM role for GitHub Actions to assume
+- `AWS_ACCOUNT_ID`: Your AWS account ID
+
+## Deployment Environments
+
+The deployment solution supports three environments:
+
+1. **Development (dev)**: For ongoing development and testing
+2. **Staging**: For pre-production testing and verification
+3. **Production (prod)**: For live production deployment
+
+## Deployment Methods
+
+### Method 1: Using GitHub Actions (Recommended)
+
+1. Push your changes to the GitHub repository
+2. GitHub Actions will automatically trigger a deployment:
+   - Pushing to `develop` branch deploys to the development environment
+   - Pushing to `main` branch deploys to the production environment
+3. Alternatively, manually trigger a workflow from the Actions tab:
+   - Go to the GitHub repository → Actions → AWS Deploy
+   - Click "Run workflow"
+   - Select the desired environment
+   - Click "Run workflow"
+
+### Method 2: Using Terraform Directly
+
+1. Navigate to the `terraform` directory
+2. Initialize Terraform:
    ```bash
-   npm run deploy
+   terraform init
    ```
-
-   This will:
-   - Build the project (via the `predeploy` script)
-   - Push the contents of the `dist` folder to the `gh-pages` branch
-
-3. Once deployment is complete, your site will be available at the URL specified in the `homepage` field
-
-### Using the Deployment Utility
-
-1. Run the deployment utility:
+3. Select the appropriate workspace:
    ```bash
-   node deploy.js
+   terraform workspace select dev|staging|prod
    ```
-
-2. Select option 1 for GitHub Pages deployment
-3. Follow the prompts
-
-### Automated Deployment (GitHub Actions)
-
-1. Push your changes to the `main` branch
-2. The GitHub Actions workflow in `.github/workflows/github-pages-deploy.yml` will automatically deploy the application
-
-## AWS S3 and CloudFront Deployment
-
-### Prerequisites
-
-1. AWS account with permissions to create/modify S3 buckets and CloudFront distributions
-2. AWS CLI installed and configured with your credentials
-
-### Setting Up AWS Resources
-
-1. Create an S3 bucket for hosting:
+   (If it doesn't exist, create it: `terraform workspace new dev|staging|prod`)
+4. Plan the deployment:
    ```bash
-   aws s3 mb s3://your-bucket-name
+   terraform plan -var="domain_name=yourdomain.com" -var="create_route53_zone=true"
    ```
-
-2. Configure the bucket for static website hosting:
+5. Apply the changes:
    ```bash
-   aws s3 website s3://your-bucket-name --index-document index.html --error-document index.html
+   terraform apply -var="domain_name=yourdomain.com" -var="create_route53_zone=true"
    ```
 
-3. Set bucket policy to allow public access (replace `your-bucket-name`):
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Effect": "Allow",
-         "Principal": "*",
-         "Action": "s3:GetObject",
-         "Resource": "arn:aws:s3:::your-bucket-name/*"
-       }
-     ]
-   }
-   ```
+### Method 3: Using the Deployment Script
 
-4. (Optional) Create a CloudFront distribution pointing to your S3 bucket for better performance and HTTPS
-
-### Manual Deployment
-
-1. Build the application:
+1. Make the deployment script executable:
    ```bash
-   npm run build
+   chmod +x scripts/deploy.sh
    ```
-
-2. Sync the build to your S3 bucket:
+2. Run the deployment script:
    ```bash
-   aws s3 sync dist/ s3://your-bucket-name --delete
+   ./scripts/deploy.sh --environment dev|staging|prod --action plan|apply|destroy
    ```
+3. Follow the prompts and review the output
 
-3. (Optional) Create CloudFront invalidation:
-   ```bash
-   aws cloudfront create-invalidation --distribution-id your-distribution-id --paths "/*"
-   ```
+## Domain Name Configuration
 
-### Using the Deployment Utility
+### Registering a Domain with Route 53 (Optional)
 
-1. Run the deployment utility:
-   ```bash
-   node deploy.js
-   ```
+1. Go to AWS Route 53 console → Registered domains → Register domain
+2. Follow the steps to register a new domain
+3. Once registered, deployment will automatically use this domain
 
-2. Select option 2 for AWS deployment
-3. Follow the prompts
+### Using an Existing Domain
 
-### Automated Deployment (GitHub Actions)
+1. If using an existing domain registered elsewhere, you need to:
+   - Set `create_route53_zone` to `true`
+   - After deployment, get the NS records from the Route 53 hosted zone
+   - Update your domain registrar's DNS settings with these NS records
 
-1. Add the required secrets to your GitHub repository (see [GITHUB_SECRETS.md](./GITHUB_SECRETS.md))
-2. Push your changes to the `main` branch
-3. The GitHub Actions workflow in `.github/workflows/aws-deploy.yml` will automatically deploy the application
+2. If your domain is already managed by Route 53:
+   - Set `create_route53_zone` to `false`
+   - Make sure the variable `domain_name` matches exactly with your Route 53 hosted zone name
 
-## Netlify Deployment
+## SSL Certificate Validation
 
-### Prerequisites
+When deploying with a custom domain, an SSL certificate will be created and validated automatically through DNS validation. This process:
 
-1. Netlify account
-2. Netlify CLI installed (optional for manual deployment)
+1. Creates the SSL certificate in AWS Certificate Manager
+2. Adds the required validation records to Route 53
+3. Waits for the certificate to be validated (this may take 5-30 minutes)
 
-### Manual Deployment via Netlify Dashboard
+## Monitoring and Logging
 
-1. Build the application:
-   ```bash
-   npm run build
-   ```
+The deployment includes:
 
-2. Drag and drop the `dist` folder onto the Netlify dashboard at https://app.netlify.com/drop
+- **CloudWatch Dashboard**: Access through AWS console → CloudWatch → Dashboards
+- **CloudWatch Logs**: ECS logs are available at `/ecs/uw-help-app`
+- **CloudWatch Alarms**: Configured for CPU and memory utilization
 
-### Using Netlify CLI
+## Scaling Configuration
 
-1. Install Netlify CLI (if not already installed):
-   ```bash
-   npm install netlify-cli -g
-   ```
+The application is configured to scale automatically based on:
 
-2. Login to Netlify:
-   ```bash
-   netlify login
-   ```
+- CPU utilization (scales up at 70% utilization)
+- Memory utilization (scales up at 70% utilization)
 
-3. Initialize a new Netlify site:
-   ```bash
-   netlify init
-   ```
+You can adjust these settings in `terraform/modules/ecs/main.tf`.
 
-4. Deploy the site:
-   ```bash
-   netlify deploy --prod
-   ```
+## Costs Management
 
-### Using the Deployment Utility
+Resource costs can be managed through:
 
-1. Run the deployment utility:
-   ```bash
-   node deploy.js
-   ```
+- Scaling down during non-peak hours
+- Using CloudFront price class `PriceClass_100` (default) instead of global distribution
+- Using DynamoDB on-demand capacity for development and predictable provisioned capacity for production
 
-2. Select option 3 for Netlify deployment
-3. Follow the prompts
+## Cleanup
 
-### Automated Deployment (GitHub Actions)
-
-1. Add the required secrets to your GitHub repository (see [GITHUB_SECRETS.md](./GITHUB_SECRETS.md))
-2. Push your changes to the `main` branch
-3. The GitHub Actions workflow in `.github/workflows/netlify-deploy.yml` will automatically deploy the application
-
-## AWS Lambda Serverless Deployment
-
-This section covers deploying the backend API to AWS Lambda using the Serverless Framework.
-
-### Prerequisites
-
-1. AWS account with appropriate permissions
-2. [Serverless Framework](https://www.serverless.com/) installed globally:
-   ```bash
-   npm install -g serverless
-   ```
-3. AWS CLI installed and configured with your credentials
-
-### Deploying with Serverless Framework
-
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
-
-2. Deploy to AWS:
-   ```bash
-   serverless deploy --stage dev --region us-west-2
-   ```
-
-   This will:
-   - Package your code
-   - Upload to AWS S3
-   - Create Lambda functions
-   - Set up API Gateway
-   - Configure DynamoDB tables
-   - Create IAM roles
-
-3. After deployment, you'll see outputs including your API endpoints:
-   ```
-   Service Information
-   service: uw-waste-management
-   stage: dev
-   region: us-west-2
-   stack: uw-waste-management-dev
-   api keys:
-     None
-   endpoints:
-     GET - https://abc123.execute-api.us-west-2.amazonaws.com/dev/api/waste
-     GET - https://abc123.execute-api.us-west-2.amazonaws.com/dev/api/waste/{id}
-     ...
-   ```
-
-### Removing the Deployment
-
-To remove all resources created by the Serverless Framework:
+To delete all resources:
 
 ```bash
-serverless remove --stage dev --region us-west-2
+./scripts/deploy.sh --environment dev|staging|prod --action destroy
 ```
 
-## AWS ECS Docker Deployment
-
-This section covers deploying the application as Docker containers to AWS ECS.
-
-### Prerequisites
-
-1. AWS account with appropriate permissions
-2. Docker installed locally
-3. AWS CLI installed and configured with your credentials
-4. Amazon ECR repository created for your images
-
-### Creating ECR Repository
-
-```bash
-aws ecr create-repository --repository-name uw-waste-management --region us-west-2
-```
-
-### Building and Pushing Docker Image
-
-1. Navigate to the project root:
-   ```bash
-   cd /path/to/project
-   ```
-
-2. Build the Docker image:
-   ```bash
-   ./infrastructure/docker/docker-build.sh --environment prod --registry ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com --push --ecr
-   ```
-
-   This script will:
-   - Build the Docker image
-   - Tag it appropriately
-   - Log in to ECR
-   - Push the image to ECR
-
-### Deploying to ECS
-
-1. Deploy using the provided script:
-   ```bash
-   ./infrastructure/aws/deploy-ecs.sh --environment prod --region us-west-2 --account YOUR_AWS_ACCOUNT_ID
-   ```
-
-   This script will:
-   - Create an ECS cluster if it doesn't exist
-   - Register a task definition
-   - Create or update the ECS service
-   - Wait for the deployment to stabilize
-
-### Monitoring Your ECS Deployment
-
-1. Check service status:
-   ```bash
-   aws ecs describe-services --cluster uw-waste-management-prod --services uw-waste-management-app --region us-west-2
-   ```
-
-2. View CloudWatch logs:
-   ```bash
-   aws logs get-log-events --log-group-name /ecs/uw-waste-management-prod --log-stream-name YOUR_LOG_STREAM --region us-west-2
-   ```
-
-## Docker Deployment
-
-This section covers deploying the application using Docker.
-
-### Local Development with Docker
-
-1. Start the development environment:
-   ```bash
-   docker-compose up
-   ```
-
-   This will:
-   - Build the application using the development target
-   - Start a local DynamoDB instance
-   - Start a DynamoDB admin interface at http://localhost:8001
-   - Mount your code as a volume for live updates
-
-2. Access the application:
-   - Frontend: http://localhost:3000
-   - API: http://localhost:3001/api
-   - DynamoDB Admin: http://localhost:8001
-
-### Production Deployment with Docker
-
-1. Build and start the production containers:
-   ```bash
-   cd infrastructure/docker
-   docker-compose -f docker-compose.prod.yml up -d
-   ```
-
-   This will:
-   - Build the application using the production target
-   - Start a production-ready container configuration
-   - Start Nginx for serving the frontend and proxying API requests
-
-2. Access the application:
-   - Frontend and API: http://localhost:80 (or https://localhost:443 if SSL is configured)
-
-### Docker Configuration Files
-
-- `Dockerfile`: Multi-stage build for development and production
-- `docker-compose.yml`: Development configuration with local services
-- `infrastructure/docker/docker-compose.prod.yml`: Production configuration with Nginx
-- `infrastructure/docker/nginx/nginx.conf`: Nginx configuration for production
-
-## Environment Variables
-
-The application uses environment variables for configuration. For deployment, you'll need to ensure these variables are set in your deployment environment.
-
-### Required Variables
-
-#### Frontend Environment Variables
-- `REACT_APP_API_URL`: URL of the backend API
-- `REACT_APP_MAP_API_KEY`: Google Maps API key for mapping disposal locations
-
-#### Backend Environment Variables
-- `NODE_ENV`: Environment mode (development, production)
-- `JWT_SECRET`: Secret key for JWT token generation
-- `DYNAMODB_TABLE`: DynamoDB table name
-- `AWS_REGION`: AWS region for services
-- `PORT`: Server port number
-
-### Setting Environment Variables
-
-#### GitHub Pages
-
-For GitHub Pages, environment variables must be included during the build process, as GitHub Pages only serves static files.
-
-Add them to your GitHub repository secrets and reference them in your workflow file.
-
-#### AWS
-
-Environment variables can be set during the build process in the GitHub Actions workflow.
-
-#### Netlify
-
-1. In the Netlify Dashboard, go to Site settings > Build & deploy > Environment
-2. Add each environment variable
-3. Trigger a new deployment
-
-## Continuous Integration/Continuous Deployment (CI/CD)
-
-The project includes GitHub Actions workflows for automated deployment:
-
-1. `.github/workflows/github-pages-deploy.yml` - Deploys to GitHub Pages
-2. `.github/workflows/aws-deploy.yml` - Deploys to AWS S3 and CloudFront
-3. `.github/workflows/netlify-deploy.yml` - Deploys to Netlify
-
-These workflows are triggered automatically when code is pushed to the `main` branch.
-
-## Infrastructure as Code
-
-The project follows infrastructure as code principles, with all infrastructure defined in version-controlled configuration files.
-
-### CloudFormation
-
-The AWS CloudFormation template (`infrastructure/aws/cloudformation.yml`) defines:
-
-- S3 bucket for frontend hosting
-- CloudFront distribution
-- DynamoDB table
-- Lambda execution role
-- API Gateway
-
-To deploy:
-
-```bash
-cd infrastructure/aws
-./deploy-cloudformation.sh --environment dev --region us-west-2
-```
-
-### Terraform
-
-The Terraform configuration (`infrastructure/aws/terraform/`) includes:
-
-- `main.tf` - Main infrastructure configuration
-- `variables.tf` - Input variables
-- `outputs.tf` - Output values
-
-To deploy:
-
-```bash
-cd infrastructure/aws/terraform
-terraform init
-terraform plan -var="environment=dev"
-terraform apply -var="environment=dev"
-```
-
-### Serverless Framework
-
-The Serverless Framework configuration (`backend/infrastructure/serverless.yml`) defines:
-
-- Lambda functions
-- API Gateway endpoints
-- DynamoDB table
-- IAM permissions
-
-To deploy:
-
-```bash
-cd backend
-serverless deploy --stage dev
-```
-
-### Docker Compose
-
-Docker Compose files define the containerized infrastructure:
-
-- `docker-compose.yml` - Development environment
-- `infrastructure/docker/docker-compose.prod.yml` - Production environment
-
-These files define services, networks, volumes, and environment variables for consistent container deployments.
-
-### AWS ECS
-
-ECS configuration files define container orchestration settings:
-
-- `infrastructure/aws/ecs-task-definition.json` - Task definition
-- `infrastructure/aws/ecs-service.json` - Service configuration
-
-These define how containers should run in the ECS environment.
+**Warning**: This will destroy all resources in the specified environment, including databases and stored data.
 
 ## Troubleshooting
 
-### Common Issues
+### Common Issues and Solutions
 
-1. **404 Errors on Page Refresh**
-   - For AWS S3, configure the error document to redirect to index.html
-   - For Netlify, the included `_redirects` file should handle this
-   - For GitHub Pages, add a custom 404.html file
+1. **Deployment fails with IAM permission errors**:
+   - Verify IAM role has all required permissions
+   - Check GitHub secrets are correctly configured
 
-2. **Environment Variables Not Working**
-   - Ensure variables are prefixed with `VITE_` for frontend access
-   - Check that the variables are correctly set in your deployment platform
-   - Rebuild and redeploy after changing environment variables
+2. **Certificate validation timeout**:
+   - Manually verify DNS records in Route 53
+   - Check domain registrar for correct NS records if using an external domain
 
-3. **Build Failures**
-   - Check the build logs for specific errors
-   - Ensure all dependencies are correctly installed
-   - Verify that your code doesn't have any syntax errors
+3. **Task definition not found**:
+   - Ensure the task definition file is correctly located at `.aws/task-definition.json`
+   - Verify container name in task definition matches the name in GitHub workflow
 
-### Getting Help
+4. **Container fails to start**:
+   - Check CloudWatch logs for application errors
+   - Verify secrets are correctly configured in AWS Parameter Store
 
-If you encounter issues not covered here, please:
+5. **CloudFront distribution shows error**:
+   - Verify health check endpoint is correctly implemented and responding
+   - Check SSL certificate is valid and correctly attached
 
-1. Check the GitHub Issues for similar problems
-2. Consult the documentation for your deployment platform
-3. Create a new issue with detailed information about the problem
+## Support
+
+For additional support with deployment issues:
+
+- Check the AWS service status page
+- Review CloudWatch logs for detailed error messages
+- Contact the DevOps team at [devops@example.com](mailto:devops@example.com)

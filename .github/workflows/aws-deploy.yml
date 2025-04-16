@@ -1,24 +1,6 @@
-name: Deploy to AWS
+name: AWS Deploy
 
 on:
-  workflow_run:
-    workflows: ["CI Pipeline"]
-    types:
-      - completed
-    branches:
-      - main
-  push:
-    branches:
-      - main
-    paths:
-      - "infrastructure/aws/**"
-      - "backend/**"
-      - "frontend/**"
-      - "src/**"
-      - "public/**"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/aws-deploy.yml"
   workflow_dispatch:
     inputs:
       environment:
@@ -27,501 +9,106 @@ on:
         default: 'dev'
         type: choice
         options:
-          - dev
-          - staging
-          - prod
-      deploy_type:
-        description: 'Deployment type'
-        required: true
-        default: 'full'
-        type: choice
-        options:
-          - full
-          - frontend-only
-          - backend-only
-          - infrastructure-only
-      deploy_notes:
-        description: 'Deployment notes'
-        required: false
-        type: string
-
-permissions:
-  id-token: write # This is required for requesting the JWT
-  contents: read
-  deployments: write
-  issues: write
+        - dev
+        - staging
+        - prod
+  push:
+    branches:
+      - main
+      - develop
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/badges/**'
+      - '.github/workflow-info/**'
+      - '.gitignore'
 
 env:
   AWS_REGION: us-west-2
-  STACK_NAME: uw-waste-management
-  TF_STATE_BUCKET: uw-waste-management-terraform-state
+  ECR_REPOSITORY: uw-help-app-${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod') || 'dev' }}-repository
+  ECS_CLUSTER: uw-help-app-${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod') || 'dev' }}-cluster
+  ECS_SERVICE: uw-help-app-${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod') || 'dev' }}-service
+  ECS_TASK_DEFINITION: .aws/task-definition.json
+  CONTAINER_NAME: uw-help-app
 
 jobs:
-  prepare:
-    name: Prepare Deployment
+  build-and-deploy:
+    name: Build and Deploy
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    outputs:
-      environment: ${{ steps.set-env.outputs.environment }}
-      deploy_type: ${{ steps.set-type.outputs.deploy_type }}
-      should_deploy: ${{ steps.check.outputs.should_deploy }}
-    steps:
-      - name: Set environment
-        id: set-env
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-          else
-            echo "environment=dev" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Set deployment type
-        id: set-type
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "deploy_type=${{ github.event.inputs.deploy_type }}" >> $GITHUB_OUTPUT
-          else
-            echo "deploy_type=full" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create deployment
-        uses: chrnorm/deployment-action@v2
-        id: deployment
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          environment: aws-${{ steps.set-env.outputs.environment }}
-          description: 'AWS deployment to ${{ steps.set-env.outputs.environment }}'
-
-      - name: Check if deployment should proceed
-        id: check
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
-            echo "should_deploy=false" >> $GITHUB_OUTPUT
-            echo "CI pipeline failed. Skipping deployment."
-          else
-            echo "should_deploy=true" >> $GITHUB_OUTPUT
-            echo "Proceeding with deployment."
-          fi
-
-  validate-cloudformation:
-    name: Validate CloudFormation Template
-    needs: prepare
-    if: needs.prepare.outputs.should_deploy == 'true' && (needs.prepare.outputs.deploy_type == 'full' || needs.prepare.outputs.deploy_type == 'infrastructure-only')
-    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-
+      
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME || '' }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID || '' }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY || '' }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
-          
-      - name: Validate CloudFormation template
-        run: |
-          aws cloudformation validate-template \
-            --template-body file://infrastructure/aws/cloudformation.yml \
-            || (echo "CloudFormation template validation failed" && exit 1)
-
-  validate-terraform:
-    name: Validate Terraform Configuration
-    needs: prepare
-    if: needs.prepare.outputs.should_deploy == 'true' && (needs.prepare.outputs.deploy_type == 'full' || needs.prepare.outputs.deploy_type == 'infrastructure-only')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        uses: docker/build-push-action@v4
         with:
-          terraform_version: 1.5.7
-          
-      - name: Terraform Init
-        run: |
-          cd infrastructure/aws/terraform
-          terraform init -backend=false
-          
-      - name: Terraform Validate
-        run: |
-          cd infrastructure/aws/terraform
-          terraform validate
-
-  validate-serverless:
-    name: Validate Serverless Configuration
-    needs: prepare
-    if: needs.prepare.outputs.should_deploy == 'true' && (needs.prepare.outputs.deploy_type == 'full' || needs.prepare.outputs.deploy_type == 'backend-only')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+          context: .
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }},${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_ENV=${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'production') || 'development' }}
+      
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          node-version: '18'
-          cache: 'npm'
-
-      - name: Install Serverless Framework
-        run: npm install -g serverless
-
-      - name: Validate Serverless Configuration
-        run: |
-          cd backend
-          serverless print --format yaml --stage ${{ needs.prepare.outputs.environment }}
-
-  build:
-    name: Build Application
-    needs: [prepare, validate-cloudformation, validate-terraform, validate-serverless]
-    if: |
-      needs.prepare.outputs.should_deploy == 'true' && 
-      (needs.prepare.outputs.deploy_type == 'full' || 
-       needs.prepare.outputs.deploy_type == 'frontend-only' || 
-       needs.prepare.outputs.deploy_type == 'backend-only')
-    runs-on: ubuntu-latest
-    environment: aws-${{ needs.prepare.outputs.environment }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+          task-definition: ${{ env.ECS_TASK_DEFINITION }}
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+      
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          node-version: '18'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Configure environment variables
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+      
+      - name: Create CloudFront invalidation
+        if: github.event.inputs.environment == 'prod' || github.ref == 'refs/heads/main'
         run: |
-          echo "REACT_APP_VERSION=${GITHUB_SHA::8}" >> $GITHUB_ENV
-          echo "REACT_APP_BUILD_TIME=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_ENV
-          echo "REACT_APP_ENVIRONMENT=${{ needs.prepare.outputs.environment }}" >> $GITHUB_ENV
-
-      - name: Build project
-        run: npm run build
-        env:
-          REACT_APP_API_URL: ${{ secrets.API_URL || '' }}
-          REACT_APP_MAP_API_KEY: ${{ secrets.MAP_API_KEY || '' }}
-          NODE_ENV: production
-
-      - name: Create build info file
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Comment=='uw-help-app-${{ github.event.inputs.environment || 'prod' }} - CloudFront Distribution'].Id" --output text)
+          if [ ! -z "$DISTRIBUTION_ID" ]; then
+            aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"
+          fi
+      
+      - name: Notify deployment success
         if: success()
         run: |
-          echo "{
-            \"version\": \"${GITHUB_SHA::8}\",
-            \"buildTime\": \"$(date +'%Y-%m-%dT%H:%M:%S')\",
-            \"environment\": \"${{ needs.prepare.outputs.environment }}\",
-            \"branch\": \"${{ github.ref_name }}\",
-            \"workflow\": \"${{ github.workflow }}\"
-          }" > build-info.json
+          echo "Deployment to ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod') || 'dev' }} successful!"
           
-      - name: Upload built artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: build-artifacts
-          path: |
-            build/
-            build-info.json
-          retention-days: 7
-
-      - name: Upload backend artifacts for deployment
-        if: needs.prepare.outputs.deploy_type == 'full' || needs.prepare.outputs.deploy_type == 'backend-only'
-        uses: actions/upload-artifact@v3
-        with:
-          name: backend-artifacts
-          path: |
-            backend/
-            !backend/node_modules/
-          retention-days: 7
-
-  deploy-infrastructure:
-    name: Deploy AWS Infrastructure
-    needs: [prepare, build]
-    if: |
-      always() && needs.prepare.outputs.should_deploy == 'true' && 
-      (needs.prepare.outputs.deploy_type == 'full' || needs.prepare.outputs.deploy_type == 'infrastructure-only') && 
-      (needs.build.result == 'success' || needs.prepare.outputs.deploy_type == 'infrastructure-only')
-    runs-on: ubuntu-latest
-    environment: aws-${{ needs.prepare.outputs.environment }}
-    outputs:
-      stack_outputs: ${{ steps.stack-outputs.outputs.stack_outputs }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME || '' }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID || '' }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY || '' }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Deploy CloudFormation Stack
-        id: cloudformation
-        run: |
-          FULL_STACK_NAME="${{ env.STACK_NAME }}-${{ needs.prepare.outputs.environment }}"
+          # Get the ALB DNS name
+          ALB_DNS=$(aws ecs describe-services --cluster $ECS_CLUSTER --services $ECS_SERVICE --query 'services[0].loadBalancers[0].targetGroupArn' --output text | xargs -I {} aws elbv2 describe-target-groups --target-group-arns {} --query 'TargetGroups[0].LoadBalancerArns[0]' --output text | xargs -I {} aws elbv2 describe-load-balancers --load-balancer-arns {} --query 'LoadBalancers[0].DNSName' --output text)
           
-          # Check if stack exists
-          if aws cloudformation describe-stacks --stack-name "$FULL_STACK_NAME" --region "${{ env.AWS_REGION }}" 2>/dev/null; then
-            ACTION="update-stack"
-            echo "Stack exists, performing update..."
+          # Get CloudFront distribution domain if in production
+          if [[ "${{ github.event.inputs.environment }}" == "prod" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+            CF_DOMAIN=$(aws cloudfront list-distributions --query "DistributionList.Items[?Comment=='uw-help-app-${{ github.event.inputs.environment || 'prod' }} - CloudFront Distribution'].DomainName" --output text)
+            echo "Application available at: https://$CF_DOMAIN"
           else
-            ACTION="create-stack"
-            echo "Stack does not exist, creating new stack..."
+            echo "Application available at: http://$ALB_DNS"
           fi
-          
-          # Deploy the stack
-          aws cloudformation $ACTION \
-            --stack-name "$FULL_STACK_NAME" \
-            --template-body file://infrastructure/aws/cloudformation.yml \
-            --parameters ParameterKey=Environment,ParameterValue=${{ needs.prepare.outputs.environment }} \
-            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-            --region "${{ env.AWS_REGION }}" \
-            --tags Key=Environment,Value=${{ needs.prepare.outputs.environment }} Key=Project,Value=UW-Waste-Management
-          
-          # Wait for stack operation to complete
-          aws cloudformation wait stack-$ACTION-complete --stack-name "$FULL_STACK_NAME" --region "${{ env.AWS_REGION }}"
-          
-          echo "cloudformation_status=$?" >> $GITHUB_OUTPUT
-
-      # Get the stack outputs as JSON
-      - name: Get stack outputs
-        id: stack-outputs
-        if: steps.cloudformation.outputs.cloudformation_status == 0
+      
+      - name: Notify deployment failure
+        if: failure()
         run: |
-          FULL_STACK_NAME="${{ env.STACK_NAME }}-${{ needs.prepare.outputs.environment }}"
-          STACK_OUTPUTS=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK_NAME" --region "${{ env.AWS_REGION }}" --query "Stacks[0].Outputs" --output json)
-          echo "stack_outputs=$STACK_OUTPUTS" >> $GITHUB_OUTPUT
-          echo "Stack outputs: $STACK_OUTPUTS"
-
-  deploy-frontend:
-    name: Deploy Frontend
-    needs: [prepare, build, deploy-infrastructure]
-    if: |
-      always() && needs.prepare.outputs.should_deploy == 'true' && 
-      (needs.prepare.outputs.deploy_type == 'full' || needs.prepare.outputs.deploy_type == 'frontend-only') && 
-      needs.build.result == 'success' && 
-      (needs.deploy-infrastructure.result == 'success' || needs.deploy-infrastructure.result == 'skipped' || needs.prepare.outputs.deploy_type == 'frontend-only')
-    runs-on: ubuntu-latest
-    environment: aws-${{ needs.prepare.outputs.environment }}
-    outputs:
-      frontend_url: ${{ steps.frontend-url.outputs.url }}
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME || '' }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID || '' }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY || '' }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: build-artifacts
-
-      - name: Get S3 bucket name and upload frontend
-        id: upload-frontend
-        run: |
-          FULL_STACK_NAME="${{ env.STACK_NAME }}-${{ needs.prepare.outputs.environment }}"
-          
-          # Get S3 bucket name from CloudFormation outputs
-          S3_BUCKET=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK_NAME" --region "${{ env.AWS_REGION }}" --query "Stacks[0].Outputs[?OutputKey=='S3BucketName'].OutputValue" --output text)
-          
-          if [ -z "$S3_BUCKET" ]; then
-            echo "Error: Could not find S3 bucket name in CloudFormation outputs"
-            exit 1
-          fi
-          
-          echo "Uploading frontend files to S3 bucket: $S3_BUCKET"
-          aws s3 sync build/ s3://$S3_BUCKET/ --delete
-          
-          # Get CloudFront distribution ID from CloudFormation outputs or by looking it up
-          CLOUDFRONT_DIST_ID=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK_NAME" --region "${{ env.AWS_REGION }}" --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue" --output text)
-          
-          if [ -z "$CLOUDFRONT_DIST_ID" ]; then
-            echo "Looking up CloudFront distribution ID..."
-            CLOUDFRONT_DIST_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Origins.Items[?DomainName=='$S3_BUCKET.s3.amazonaws.com']].Id" --output text)
-          fi
-          
-          if [ -n "$CLOUDFRONT_DIST_ID" ]; then
-            echo "Invalidating CloudFront cache for distribution: $CLOUDFRONT_DIST_ID"
-            aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_DIST_ID --paths "/*"
-          else
-            echo "Warning: Could not find CloudFront distribution ID"
-          fi
-
-      - name: Get frontend URL
-        id: frontend-url
-        run: |
-          FULL_STACK_NAME="${{ env.STACK_NAME }}-${{ needs.prepare.outputs.environment }}"
-          
-          # Get CloudFront URL from CloudFormation outputs
-          FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK_NAME" --region "${{ env.AWS_REGION }}" --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDomainName'].OutputValue" --output text)
-          
-          if [ -n "$FRONTEND_URL" ]; then
-            echo "url=https://$FRONTEND_URL" >> $GITHUB_OUTPUT
-            echo "Frontend URL: https://$FRONTEND_URL"
-          else
-            echo "Warning: Could not find CloudFront domain name in stack outputs"
-            echo "url=unknown" >> $GITHUB_OUTPUT
-          fi
-
-  deploy-backend:
-    name: Deploy Backend
-    needs: [prepare, build, deploy-infrastructure]
-    if: |
-      always() && needs.prepare.outputs.should_deploy == 'true' && 
-      (needs.prepare.outputs.deploy_type == 'full' || needs.prepare.outputs.deploy_type == 'backend-only') && 
-      needs.build.result == 'success' && 
-      (needs.deploy-infrastructure.result == 'success' || needs.deploy-infrastructure.result == 'skipped' || needs.prepare.outputs.deploy_type == 'backend-only')
-    runs-on: ubuntu-latest
-    environment: aws-${{ needs.prepare.outputs.environment }}
-    outputs:
-      api_url: ${{ steps.api-url.outputs.url }}
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME || '' }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID || '' }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY || '' }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Download backend artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: backend-artifacts
-          path: backend
-
-      - name: Install Serverless Framework
-        run: npm install -g serverless
-
-      - name: Deploy backend with Serverless
-        working-directory: backend
-        run: |
-          npm ci
-          serverless deploy --stage ${{ needs.prepare.outputs.environment }} --verbose --conceal
-        env:
-          NODE_ENV: production
-          AWS_REGION: ${{ env.AWS_REGION }}
-          DYNAMODB_TABLE: ${{ env.STACK_NAME }}-${{ needs.prepare.outputs.environment }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET || 'changeme-in-production' }}
-
-      - name: Get API URL
-        id: api-url
-        working-directory: backend
-        run: |
-          # Get API Gateway URL from Serverless info
-          API_URL=$(serverless info --stage ${{ needs.prepare.outputs.environment }} --verbose | grep -o 'ServiceEndpoint:.*' | cut -d' ' -f2)
-          
-          if [ -n "$API_URL" ]; then
-            echo "url=$API_URL" >> $GITHUB_OUTPUT
-            echo "API URL: $API_URL"
-          else
-            echo "Warning: Could not find API Gateway URL"
-            
-            # Try from CloudFormation stack outputs as fallback
-            FULL_STACK_NAME="${{ env.STACK_NAME }}-${{ needs.prepare.outputs.environment }}"
-            API_URL=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK_NAME" --region "${{ env.AWS_REGION }}" --query "Stacks[0].Outputs[?OutputKey=='ApiGatewayUrl'].OutputValue" --output text)
-            
-            if [ -n "$API_URL" ]; then
-              echo "url=$API_URL" >> $GITHUB_OUTPUT
-              echo "API URL (from CloudFormation): $API_URL"
-            else
-              echo "url=unknown" >> $GITHUB_OUTPUT
-            fi
-          fi
-
-  finalize:
-    name: Finalize Deployment
-    needs: [prepare, deploy-infrastructure, deploy-frontend, deploy-backend]
-    if: always() && needs.prepare.outputs.should_deploy == 'true'
-    runs-on: ubuntu-latest
-    environment: aws-${{ needs.prepare.outputs.environment }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Download build-info
-        uses: actions/download-artifact@v3
-        with:
-          name: build-artifacts
-          path: artifacts
-
-      - name: Create deployment status
-        uses: chrnorm/deployment-status@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          state: ${{ (needs.deploy-frontend.result == 'success' || needs.deploy-backend.result == 'success' || needs.deploy-infrastructure.result == 'success') && 'success' || 'failure' }}
-          deployment-id: ${{ github.run_id }}
-          environment-url: ${{ needs.deploy-frontend.outputs.frontend_url || '' }}
-          description: "AWS deployment to ${{ needs.prepare.outputs.environment }}"
-
-      - name: Create deployment issue
-        if: |
-          (needs.deploy-frontend.result == 'success' || needs.deploy-backend.result == 'success' || needs.deploy-infrastructure.result == 'success') &&
-          github.event.inputs.deploy_notes != ''
-        uses: JasonEtco/create-an-issue@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEPLOY_ENV: aws-${{ needs.prepare.outputs.environment }}
-          DEPLOY_TYPE: ${{ needs.prepare.outputs.deploy_type }}
-          FRONTEND_URL: ${{ needs.deploy-frontend.outputs.frontend_url || 'N/A' }}
-          API_URL: ${{ needs.deploy-backend.outputs.api_url || 'N/A' }}
-          DEPLOY_VERSION: ${{ github.sha }}
-          DEPLOY_TIME: ${{ github.event.repository.updated_at }}
-          DEPLOY_NOTES: ${{ github.event.inputs.deploy_notes }}
-        with:
-          filename: .github/AWS_DEPLOYMENT_TEMPLATE.md
-          update_existing: true
-
-  notify:
-    name: Post-Deployment Notification
-    needs: [prepare, deploy-infrastructure, deploy-frontend, deploy-backend, finalize]
-    if: always() && needs.prepare.outputs.should_deploy == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Notify on success
-        if: |
-          (needs.deploy-frontend.result == 'success' || needs.deploy-backend.result == 'success' || needs.deploy-infrastructure.result == 'success') &&
-          needs.finalize.result == 'success'
-        run: |
-          echo "🚀 Successfully deployed to AWS (${{ needs.prepare.outputs.environment }})"
-          echo "Deployment type: ${{ needs.prepare.outputs.deploy_type }}"
-          echo "Environment: ${{ needs.prepare.outputs.environment }}"
-          
-          if [ "${{ needs.deploy-frontend.result }}" = "success" ]; then
-            echo "Frontend URL: ${{ needs.deploy-frontend.outputs.frontend_url || 'Unknown' }}"
-          fi
-          
-          if [ "${{ needs.deploy-backend.result }}" = "success" ]; then
-            echo "API URL: ${{ needs.deploy-backend.outputs.api_url || 'Unknown' }}"
-          fi
-          
-      - name: Notify on failure
-        if: |
-          (needs.deploy-frontend.result != 'success' && needs.deploy-backend.result != 'success' && needs.deploy-infrastructure.result != 'success') ||
-          needs.finalize.result != 'success'
-        run: |
-          echo "❌ Failed to deploy to AWS (${{ needs.prepare.outputs.environment }})"
-          echo "Deployment type: ${{ needs.prepare.outputs.deploy_type }}"
-          echo "Check the workflow logs for details."
-          
-          if [ "${{ needs.deploy-infrastructure.result }}" != "success" ] && [ "${{ needs.deploy-infrastructure.result }}" != "skipped" ]; then
-            echo "Infrastructure deployment failed."
-          fi
-          
-          if [ "${{ needs.deploy-frontend.result }}" != "success" ] && [ "${{ needs.deploy-frontend.result }}" != "skipped" ]; then
-            echo "Frontend deployment failed."
-          fi
-          
-          if [ "${{ needs.deploy-backend.result }}" != "success" ] && [ "${{ needs.deploy-backend.result }}" != "skipped" ]; then
-            echo "Backend deployment failed."
-          fi
+          echo "Deployment to ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod') || 'dev' }} failed!"

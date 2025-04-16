@@ -1,111 +1,225 @@
-# UW Waste Management App - Deployment Configurations
+# UW Help App - Waste Management Platform
 
-This repository contains comprehensive deployment configurations for the UW Waste Management App to various cloud platforms.
+![UW Help App Logo](generated-icon.png)
 
-## Deployment Options
+> A comprehensive waste management platform designed to empower the University of Washington community through digital sustainability solutions.
 
-### 1. GitHub Pages (Static Frontend)
-- **Configuration**: `.github/workflows/github-pages-deploy.yml`
-- **Automated Deployment**: Triggered on push to the main branch
-- **Manual Configuration**: See `infrastructure/github-pages/` directory
-- **Required Secrets**: See `GITHUB_SECRETS.md` for setup instructions
+**Version:** 1.0.0  
+**Date:** April 16, 2025  
+**Author:** Bonaventure  
+**Project Lead:** Bonaventure  
+**Project ID:** PROYNSMD
 
-### 2. AWS (Full Stack)
-- **CloudFormation**: `infrastructure/aws/cloudformation.yml`
-- **Terraform**: `infrastructure/aws/terraform/` directory
-- **ECS/Fargate**: Container deployment with `infrastructure/aws/ecs-*.json` files
-- **Lambda**: Serverless deployment with `backend/infrastructure/serverless.yml`
-- **Automated Deployment**: `.github/workflows/aws-deploy.yml` 
-- **Required Secrets**: See `GITHUB_SECRETS.md` for setup instructions
+## Overview
 
-### 3. Netlify (Static Frontend)
-- **Configuration**: `netlify.toml` and `.github/workflows/netlify-deploy.yml`
-- **Automated Deployment**: Triggered on push to the main branch
-- **Required Secrets**: See `GITHUB_SECRETS.md` for setup instructions
+The UW Help App is a cutting-edge waste management platform developed to streamline and enhance sustainability efforts at the University of Washington. This platform leverages modern cloud technology, containerized architecture, and location-based services to provide an intuitive and efficient waste disposal and tracking system for the university community.
 
-### 4. Docker (Development & Production)
-- **Dockerfile**: Multi-stage build for development and production
-- **Docker Compose**: 
-  - Development: `docker-compose.yml`
-  - Production: `infrastructure/docker/docker-compose.prod.yml`
-- **Deployment Scripts**: `infrastructure/docker/docker-build.sh`
+## Key Features
 
-## Local Development with Docker
+- **Interactive Waste Disposal Mapping**
+  - Geolocation-based navigation to nearest appropriate disposal sites
+  - Real-time availability updates for recycling and composting stations
+  - Turn-by-turn campus directions to waste facilities
 
-Start the development environment with all required services:
+- **Waste Classification System**
+  - AI-powered image recognition for waste type identification
+  - Comprehensive database of disposable items with proper disposal methods
+  - Educational content on waste sorting best practices
 
-```bash
-docker-compose up
+- **Community Engagement**
+  - Gamification elements with sustainability achievements
+  - Campus-wide waste reduction challenges and leaderboards
+  - Social sharing of personal sustainability impact
+
+- **Analytics Dashboard**
+  - Individual waste disposal metrics and improvements
+  - Departmental and building-level sustainability comparisons
+  - Campus-wide waste diversion and reduction statistics
+
+- **Administrator Tools**
+  - Waste facility management and status updates
+  - Problem reporting and maintenance workflow
+  - Data export for sustainability reporting
+
+## Technology Stack
+
+### Frontend
+- React.js with responsive design
+- Geolocation services integration
+- Progressive Web App (PWA) capabilities
+- Mobile-first, accessible UI/UX
+
+### Backend
+- Node.js RESTful API architecture
+- DynamoDB for scalable NoSQL data storage
+- AWS Lambda for serverless processing
+- JWT authentication and role-based access control
+
+### DevOps & Infrastructure
+- AWS ECS containerized deployment
+- Terraform infrastructure as code
+- GitHub Actions CI/CD pipeline
+- AWS CloudFront content delivery network
+- Route 53 DNS management with custom domain
+- CloudWatch monitoring and alerting
+
+## Architecture
+
+The platform follows a modern cloud-native architecture with microservices running in containers, orchestrated by AWS ECS. The system is designed to be highly available, scalable, and secure.
+
+```
+┌─────────────────┐     ┌───────────────┐     ┌────────────────┐
+│                 │     │               │     │                │
+│  React Frontend │────▶│ API Gateway   │────▶│  ECS Services  │
+│                 │     │               │     │                │
+└─────────────────┘     └───────────────┘     └────────┬───────┘
+                                                       │
+                                                       ▼
+┌─────────────────┐     ┌───────────────┐     ┌────────────────┐
+│                 │     │               │     │                │
+│   CloudFront    │◀────│   Route 53    │     │    DynamoDB    │
+│                 │     │               │     │                │
+└─────────────────┘     └───────────────┘     └────────────────┘
 ```
 
-This will start:
-- The application in development mode
-- Local DynamoDB instance
-- DynamoDB Admin UI (accessible at http://localhost:8001)
+## Getting Started
 
-## Cloud Deployment Instructions
+### Prerequisites
 
-### AWS CloudFormation Deployment
+- Node.js 20.x or later
+- AWS Account with appropriate permissions
+- Docker and Docker Compose for local development
+- Terraform 1.0.0+ for infrastructure deployment
+- GitHub account for CI/CD integration
 
-```bash
-cd infrastructure/aws
-./deploy-cloudformation.sh --environment dev --region us-west-2
+### Local Development Setup
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-organization/uw-help-app.git
+   cd uw-help-app
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Set up environment variables:
+   ```bash
+   cp environments/template.env .env
+   # Edit .env with your configuration
+   ```
+
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+5. Access the application at http://localhost:3000
+
+### Backend API Documentation
+
+The backend API follows RESTful principles and provides the following key endpoints:
+
+- `GET /api/waste` - Retrieve waste items with filtering options
+- `POST /api/waste` - Add a new waste item
+- `GET /api/locations` - Get disposal locations with filtering
+- `GET /api/users/:id/statistics` - Retrieve user-specific waste statistics
+- `POST /api/auth/login` - Authenticate user and retrieve JWT token
+
+Detailed API documentation is available in the [API Documentation](docs/API.md) file.
+
+## Deployment
+
+The platform supports multiple deployment options, with the primary method being AWS ECS through our Terraform-based Infrastructure as Code (IaC).
+
+### Deployment Environments
+
+- **Development (dev)**: For ongoing development and testing
+- **Staging**: For pre-production validation
+- **Production (prod)**: For the live production environment
+
+### Deployment Methods
+
+1. **GitHub Actions (Recommended)**:
+   Automated CI/CD pipeline that builds, tests, and deploys the application based on branch changes.
+
+2. **Manual Terraform Deployment**:
+   Direct infrastructure provisioning and application deployment using Terraform commands.
+
+3. **Deployment Script**:
+   Simplified deployment using the included `scripts/deploy.sh` script.
+
+For detailed deployment instructions, please refer to the [Deployment Guide](DEPLOYMENT.md).
+
+## Project Structure
+
+```
+uw-help-app/
+├── .github/                   # GitHub Actions workflows and templates
+├── backend/                   # Backend API and services
+│   ├── api/                   # API routes and controllers
+│   ├── config/                # Configuration files
+│   ├── database/              # Database models and connections
+│   ├── middleware/            # Express middleware
+│   └── tests/                 # Backend tests
+├── Cloud/                     # Cloud deployment resources
+│   ├── aws/                   # AWS-specific configuration
+│   ├── docker/                # Docker configuration
+│   ├── github-pages/          # GitHub Pages deployment
+│   └── netlify/               # Netlify deployment (alternative)
+├── scripts/                   # Utility scripts
+├── terraform/                 # Infrastructure as Code
+│   ├── modules/               # Terraform modules
+│   │   ├── database/          # DynamoDB resources
+│   │   ├── dns_cdn/           # Route 53 and CloudFront
+│   │   ├── ecs/               # ECS container orchestration
+│   │   ├── networking/        # VPC, subnets, gateways
+│   │   └── security/          # IAM, security groups
+│   ├── main.tf                # Main Terraform configuration
+│   └── variables.tf           # Terraform variables
+└── docs/                      # Documentation
 ```
 
-### AWS Terraform Deployment
+## Team
 
-```bash
-cd infrastructure/aws/terraform
-./deploy.sh --environment dev --region us-west-2
-```
+- **Bonaventure** - Project Lead, DevOps Architect
+- Jane Doe - Backend Developer
+- John Smith - Frontend Developer
+- Alice Johnson - UI/UX Designer
+- Bob Brown - QA Engineer
 
-### AWS ECS Deployment
+## Contributing
 
-```bash
-cd infrastructure/aws
-./deploy-ecs.sh --environment dev --region us-west-2 --account YOUR_AWS_ACCOUNT_ID
-```
+We welcome contributions from the University of Washington community. Please review our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
 
-### AWS Serverless Deployment
+### Development Workflow
 
-Requires the [Serverless Framework](https://www.serverless.com/):
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-```bash
-cd backend
-serverless deploy --stage dev --region us-west-2
-```
+## License
 
-## Deployment Utility
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-The included `deploy.js` script provides an interactive CLI utility for manual deployments:
+## Acknowledgments
 
-```bash
-node deploy.js
-```
+- University of Washington Sustainability Office
+- UW Information Technology Services
+- UW Facilities Services
+- The open-source community for providing valuable tools and libraries
 
-Select from the available deployment options in the interactive menu.
+## Contact
 
-## Documentation
+For questions, support, or feedback, please contact:
 
-- `DEPLOYMENT.md` - Comprehensive deployment guide
-- `DEPLOY-HELP.md` - Quick reference for deployment troubleshooting
-- `GITHUB_SECRETS.md` - Instructions for setting up required secrets
+**Bonaventure**  
+Project Lead  
+Email: proynsmd@example.com  
 
-## Infrastructure as Code
-
-All infrastructure is defined as code, supporting:
-
-- CloudFormation templates
-- Terraform configuration
-- Serverless Framework
-- Docker configurations
-- GitHub Actions workflows
-
-This ensures consistent, reproducible deployments across all environments.
-
-## Security Best Practices
-
-- All API keys and secrets are stored securely in environment variables or secret managers
-- Production deployments use HTTPS with proper certificates
-- IAM roles follow the principle of least privilege
-- Database access is restricted to application services only
+University of Washington  
+Seattle, WA 98195
