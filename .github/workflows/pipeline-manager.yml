@@ -1,0 +1,341 @@
+name: CI/CD Pipeline Manager
+
+on:
+  workflow_run:
+    workflows:
+      - "CI Pipeline"
+      - "Deploy to GitHub Pages"
+      - "Deploy to AWS"
+      - "Deploy to Netlify"
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      generate_report:
+        description: 'Generate deployment report'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  track-pipeline:
+    name: Track Pipeline Status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get workflow details
+        id: workflow-details
+        if: github.event_name == 'workflow_run'
+        run: |
+          echo "workflow_name=${{ github.event.workflow_run.name }}" >> $GITHUB_OUTPUT
+          echo "workflow_status=${{ github.event.workflow_run.conclusion }}" >> $GITHUB_OUTPUT
+          echo "workflow_url=${{ github.event.workflow_run.html_url }}" >> $GITHUB_OUTPUT
+          echo "workflow_id=${{ github.event.workflow_run.id }}" >> $GITHUB_OUTPUT
+          echo "workflow_head_sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+          echo "workflow_head_branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+          
+          # Get commit message
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" ${{ github.event.workflow_run.head_sha }})
+          echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+
+      - name: Create pipeline status comment on related PR
+        if: github.event_name == 'workflow_run' && contains(fromJSON('["opened", "synchronize"]'), github.event.workflow_run.event)
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const workflowName = '${{ steps.workflow-details.outputs.workflow_name }}';
+            const workflowStatus = '${{ steps.workflow-details.outputs.workflow_status }}';
+            const workflowUrl = '${{ steps.workflow-details.outputs.workflow_url }}';
+            const commitSha = '${{ steps.workflow-details.outputs.workflow_head_sha }}';
+            const commitBranch = '${{ steps.workflow-details.outputs.workflow_head_branch }}';
+            
+            const statusEmoji = workflowStatus === 'success' ? '✅' : 
+                               workflowStatus === 'failure' ? '❌' : 
+                               workflowStatus === 'cancelled' ? '⚠️' : '🔄';
+            
+            // Find open PRs with the same head SHA
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'updated',
+              direction: 'desc'
+            });
+            
+            const relatedPRs = prs.data.filter(pr => pr.head.sha === commitSha);
+            
+            if (relatedPRs.length > 0) {
+              const pr = relatedPRs[0];
+              
+              const comment = `## ${statusEmoji} Pipeline Status Update
+            
+            The **${workflowName}** workflow has **${workflowStatus}**.
+            
+            | Workflow | Status | Details |
+            |----------|--------|---------|
+            | ${workflowName} | ${workflowStatus} | [View Logs](${workflowUrl}) |
+            
+            ### Commit Information
+            - **Branch:** \`${commitBranch}\`
+            - **Commit:** \`${commitSha.substring(0, 7)}\`
+            - **Message:** ${${{ steps.workflow-details.outputs.commit_message }}}
+            
+            ${workflowStatus !== 'success' ? '⚠️ Please check the workflow logs for more details on any failures.' : '✨ All checks have passed successfully!'}
+            `;
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: comment
+              });
+            }
+
+      - name: Add issue label for failed workflows
+        if: github.event_name == 'workflow_run' && steps.workflow-details.outputs.workflow_status == 'failure'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const workflowName = '${{ steps.workflow-details.outputs.workflow_name }}';
+            const workflowUrl = '${{ steps.workflow-details.outputs.workflow_url }}';
+            const commitSha = '${{ steps.workflow-details.outputs.workflow_head_sha }}';
+            const commitBranch = '${{ steps.workflow-details.outputs.workflow_head_branch }}';
+            
+            // Create an issue for the failed workflow
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Pipeline Failure: ${workflowName} on ${commitBranch}`,
+              body: `## Pipeline Failure Detected
+            
+            The **${workflowName}** workflow has failed on branch \`${commitBranch}\`.
+            
+            ### Details
+            - **Workflow:** ${workflowName}
+            - **Branch:** ${commitBranch}
+            - **Commit:** ${commitSha.substring(0, 7)}
+            - **Logs:** [View Workflow Logs](${workflowUrl})
+            
+            ### Next Steps
+            1. Review the workflow logs to identify the issue
+            2. Fix the problem in a new commit
+            3. Re-run the workflow
+            
+            Please address this issue promptly to maintain CI/CD pipeline integrity.
+            `,
+              labels: ['pipeline-failure', 'needs-attention']
+            });
+
+  generate-report:
+    name: Generate Pipeline Report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.generate_report == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Get workflow runs
+        id: get-workflows
+        run: |
+          mkdir -p reports
+          
+          # Get last 20 workflow runs
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=20" \
+            > reports/recent_workflows.json
+          
+          # Get workflows
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows" \
+            > reports/workflows.json
+          
+          echo "::set-output name=report_time::$(date +'%Y-%m-%d %H:%M:%S')"
+
+      - name: Generate HTML report
+        run: |
+          cat > reports/pipeline_report.html << 'EOL'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>CI/CD Pipeline Report</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 1200px; margin: 0 auto; padding: 20px; }
+              h1 { color: #0366d6; border-bottom: 1px solid #eaecef; padding-bottom: 10px; }
+              table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+              th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
+              th { background-color: #f6f8fa; }
+              tr:hover { background-color: #f6f8fa; }
+              .success { color: #22863a; }
+              .failure { color: #cb2431; }
+              .pending { color: #dbab09; }
+              .container { margin-bottom: 30px; }
+              .card { border: 1px solid #e1e4e8; border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+              .card-header { font-weight: bold; margin-bottom: 12px; }
+              .badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+              .badge-success { background-color: #dcffe4; color: #22863a; }
+              .badge-failure { background-color: #ffeef0; color: #cb2431; }
+              .badge-pending { background-color: #fff5b1; color: #735c0f; }
+            </style>
+          </head>
+          <body>
+            <h1>CI/CD Pipeline Report</h1>
+            <p>Generated on: <span id="report-date"></span></p>
+            
+            <div class="container">
+              <h2>Recent Workflow Runs</h2>
+              <div id="recent-runs"></div>
+            </div>
+            
+            <div class="container">
+              <h2>Workflow Success Rate (Last 20 runs)</h2>
+              <div id="success-rate"></div>
+            </div>
+            
+            <script>
+              document.getElementById('report-date').textContent = '${{ steps.get-workflows.outputs.report_time }}';
+              
+              // Load workflow data
+              fetch('recent_workflows.json')
+                .then(response => response.json())
+                .then(data => {
+                  const workflowRuns = data.workflow_runs;
+                  const workflowsDiv = document.getElementById('recent-runs');
+                  
+                  // Create table for recent runs
+                  const table = document.createElement('table');
+                  table.innerHTML = `
+                    <tr>
+                      <th>Workflow</th>
+                      <th>Branch</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                      <th>Duration</th>
+                      <th>Commit</th>
+                      <th>Actions</th>
+                    </tr>
+                  `;
+                  
+                  // Track success rates
+                  const workflowStats = {};
+                  
+                  workflowRuns.forEach(run => {
+                    // Calculate duration
+                    const created = new Date(run.created_at);
+                    const updated = new Date(run.updated_at);
+                    const durationMs = updated - created;
+                    const minutes = Math.floor(durationMs / 60000);
+                    const seconds = Math.floor((durationMs % 60000) / 1000);
+                    const durationText = `${minutes}m ${seconds}s`;
+                    
+                    // Create row
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                      <td>${run.name}</td>
+                      <td>${run.head_branch}</td>
+                      <td class="${run.conclusion === 'success' ? 'success' : run.conclusion === 'failure' ? 'failure' : 'pending'}">
+                        ${run.conclusion || 'pending'}
+                      </td>
+                      <td>${new Date(run.created_at).toLocaleString()}</td>
+                      <td>${durationText}</td>
+                      <td>${run.head_commit ? run.head_commit.message.substring(0, 30) + '...' : 'N/A'}</td>
+                      <td><a href="${run.html_url}" target="_blank">View</a></td>
+                    `;
+                    table.appendChild(row);
+                    
+                    // Update stats
+                    if (!workflowStats[run.name]) {
+                      workflowStats[run.name] = { total: 0, success: 0, name: run.name };
+                    }
+                    workflowStats[run.name].total++;
+                    if (run.conclusion === 'success') {
+                      workflowStats[run.name].success++;
+                    }
+                  });
+                  
+                  workflowsDiv.appendChild(table);
+                  
+                  // Generate success rate cards
+                  const successRateDiv = document.getElementById('success-rate');
+                  Object.values(workflowStats).forEach(stat => {
+                    const successRate = (stat.success / stat.total * 100).toFixed(1);
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    
+                    let badgeClass = 'badge-pending';
+                    if (successRate >= 90) badgeClass = 'badge-success';
+                    else if (successRate < 70) badgeClass = 'badge-failure';
+                    
+                    card.innerHTML = `
+                      <div class="card-header">${stat.name}</div>
+                      <div>
+                        Success Rate: <span class="badge ${badgeClass}">${successRate}%</span>
+                        (${stat.success}/${stat.total} runs successful)
+                      </div>
+                    `;
+                    successRateDiv.appendChild(card);
+                  });
+                });
+            </script>
+          </body>
+          </html>
+          EOL
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: pipeline-report
+          path: reports/
+          retention-days: 30
+
+      - name: Create report issue
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `📊 CI/CD Pipeline Report - ${new Date().toISOString().split('T')[0]}`,
+              body: `## CI/CD Pipeline Health Report
+              
+              A new pipeline health report has been generated.
+              
+              ### Report Details
+              - **Generated:** ${new Date().toLocaleString()}
+              - **Requested by:** @${{ github.actor }}
+              
+              ### Report Artifacts
+              
+              The full HTML report has been uploaded as a workflow artifact. Download it from the Actions tab or from [this workflow run](${`https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`}).
+              
+              ### Next Steps
+              
+              1. Download the report artifact
+              2. Open the HTML file in your browser
+              3. Review the pipeline health statistics
+              
+              > This report provides insights into workflow performance and success rates to help maintain a healthy CI/CD pipeline.
+              `,
+              labels: ['documentation', 'pipeline-report']
+            });

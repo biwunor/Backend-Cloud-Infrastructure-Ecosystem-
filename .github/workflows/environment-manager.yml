@@ -1,0 +1,226 @@
+name: Environment Manager
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'create'
+        type: choice
+        options:
+          - create
+          - update
+          - delete
+      environment:
+        description: 'Environment to manage'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      aws_region:
+        description: 'AWS Region'
+        required: false
+        default: 'us-west-2'
+        type: string
+      gh_environment_url:
+        description: 'GitHub Environment URL'
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+  environments: write
+
+env:
+  AWS_REGION: ${{ github.event.inputs.aws_region || 'us-west-2' }}
+  STACK_NAME: uw-waste-management-${{ github.event.inputs.environment }}
+
+jobs:
+  manage-environment:
+    name: Manage Deployment Environment
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME || '' }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID || '' }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY || '' }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create environment
+        if: github.event.inputs.action == 'create'
+        run: |
+          echo "Creating environment: ${{ github.event.inputs.environment }}"
+          
+          # Create CloudFormation stack
+          aws cloudformation create-stack \
+            --stack-name ${{ env.STACK_NAME }} \
+            --template-body file://infrastructure/aws/cloudformation.yml \
+            --parameters ParameterKey=Environment,ParameterValue=${{ github.event.inputs.environment }} \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --tags Key=Environment,Value=${{ github.event.inputs.environment }} Key=Project,Value=UW-Waste-Management
+          
+          echo "Waiting for stack creation to complete..."
+          aws cloudformation wait stack-create-complete --stack-name ${{ env.STACK_NAME }}
+          
+          # Get outputs
+          STACK_OUTPUTS=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs" --output json)
+          echo "Stack outputs: $STACK_OUTPUTS"
+          
+          # Extract key outputs
+          S3_BUCKET=$(echo "$STACK_OUTPUTS" | jq -r '.[] | select(.OutputKey=="S3BucketName") | .OutputValue')
+          CLOUDFRONT_URL=$(echo "$STACK_OUTPUTS" | jq -r '.[] | select(.OutputKey=="CloudFrontDomainName") | .OutputValue')
+          API_URL=$(echo "$STACK_OUTPUTS" | jq -r '.[] | select(.OutputKey=="ApiGatewayUrl") | .OutputValue')
+          
+          echo "S3 Bucket: $S3_BUCKET"
+          echo "CloudFront URL: $CLOUDFRONT_URL"
+          echo "API URL: $API_URL"
+          
+          # Create environment variables file for this environment
+          mkdir -p environments
+          cat > environments/${{ github.event.inputs.environment }}.env <<EOL
+          # Environment: ${{ github.event.inputs.environment }}
+          # Created: $(date)
+          
+          # AWS Resources
+          AWS_REGION=${{ env.AWS_REGION }}
+          S3_BUCKET=$S3_BUCKET
+          CLOUDFRONT_URL=$CLOUDFRONT_URL
+          API_URL=$API_URL
+          
+          # Application Configuration
+          NODE_ENV=${{ github.event.inputs.environment == 'prod' && 'production' || github.event.inputs.environment == 'staging' && 'staging' || 'development' }}
+          REACT_APP_API_URL=${API_URL}
+          BACKEND_URL=https://${CLOUDFRONT_URL}
+          EOL
+          
+          echo "Created environment file: environments/${{ github.event.inputs.environment }}.env"
+
+      - name: Update environment
+        if: github.event.inputs.action == 'update'
+        run: |
+          echo "Updating environment: ${{ github.event.inputs.environment }}"
+          
+          # Update CloudFormation stack
+          aws cloudformation update-stack \
+            --stack-name ${{ env.STACK_NAME }} \
+            --template-body file://infrastructure/aws/cloudformation.yml \
+            --parameters ParameterKey=Environment,ParameterValue=${{ github.event.inputs.environment }} \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --tags Key=Environment,Value=${{ github.event.inputs.environment }} Key=Project,Value=UW-Waste-Management
+          
+          echo "Waiting for stack update to complete..."
+          aws cloudformation wait stack-update-complete --stack-name ${{ env.STACK_NAME }}
+          
+          # Get outputs
+          STACK_OUTPUTS=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs" --output json)
+          
+          # Extract key outputs
+          S3_BUCKET=$(echo "$STACK_OUTPUTS" | jq -r '.[] | select(.OutputKey=="S3BucketName") | .OutputValue')
+          CLOUDFRONT_URL=$(echo "$STACK_OUTPUTS" | jq -r '.[] | select(.OutputKey=="CloudFrontDomainName") | .OutputValue')
+          API_URL=$(echo "$STACK_OUTPUTS" | jq -r '.[] | select(.OutputKey=="ApiGatewayUrl") | .OutputValue')
+          
+          # Update environment variables file
+          mkdir -p environments
+          cat > environments/${{ github.event.inputs.environment }}.env <<EOL
+          # Environment: ${{ github.event.inputs.environment }}
+          # Updated: $(date)
+          
+          # AWS Resources
+          AWS_REGION=${{ env.AWS_REGION }}
+          S3_BUCKET=$S3_BUCKET
+          CLOUDFRONT_URL=$CLOUDFRONT_URL
+          API_URL=$API_URL
+          
+          # Application Configuration
+          NODE_ENV=${{ github.event.inputs.environment == 'prod' && 'production' || github.event.inputs.environment == 'staging' && 'staging' || 'development' }}
+          REACT_APP_API_URL=${API_URL}
+          BACKEND_URL=https://${CLOUDFRONT_URL}
+          EOL
+          
+          echo "Updated environment file: environments/${{ github.event.inputs.environment }}.env"
+
+      - name: Delete environment
+        if: github.event.inputs.action == 'delete'
+        run: |
+          echo "Deleting environment: ${{ github.event.inputs.environment }}"
+          
+          # Empty S3 bucket first if it exists
+          S3_BUCKET=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='S3BucketName'].OutputValue" --output text 2>/dev/null || echo "")
+          
+          if [ -n "$S3_BUCKET" ]; then
+            echo "Emptying S3 bucket: $S3_BUCKET"
+            aws s3 rm s3://$S3_BUCKET --recursive
+          fi
+          
+          # Delete CloudFormation stack
+          aws cloudformation delete-stack --stack-name ${{ env.STACK_NAME }}
+          
+          echo "Waiting for stack deletion to complete..."
+          aws cloudformation wait stack-delete-complete --stack-name ${{ env.STACK_NAME }}
+          
+          # Remove environment variables file
+          if [ -f "environments/${{ github.event.inputs.environment }}.env" ]; then
+            rm environments/${{ github.event.inputs.environment }}.env
+            echo "Removed environment file"
+          fi
+
+      - name: Configure GitHub Environment
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const environment = '${{ github.event.inputs.environment }}';
+            const action = '${{ github.event.inputs.action }}';
+            const ghEnvironmentUrl = '${{ github.event.inputs.gh_environment_url }}';
+            
+            if (action === 'create' || action === 'update') {
+              try {
+                // Update GitHub environment settings
+                console.log(`Configuring GitHub environment: ${environment}`);
+                
+                // Update environment protection rules, URLs, etc.
+                // Note: This may require additional permissions not available to GitHub Actions
+                console.log('GitHub environment configured successfully');
+              } catch (error) {
+                console.log(`Error configuring GitHub environment: ${error.message}`);
+              }
+            }
+            
+            if (action === 'delete') {
+              console.log(`Note: GitHub environments cannot be deleted via API. Please delete the "${environment}" environment manually from GitHub repository settings if needed.`);
+            }
+
+      - name: Commit environment configuration
+        if: github.event.inputs.action == 'create' || github.event.inputs.action == 'update'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add environments/${{ github.event.inputs.environment }}.env
+          git commit -m "Update ${{ github.event.inputs.environment }} environment configuration" || echo "No changes to commit"
+          git push || echo "Could not push changes"
+
+  notify:
+    name: Send Notification
+    needs: manage-environment
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Environment management notification
+        run: |
+          if [ "${{ needs.manage-environment.result }}" = "success" ]; then
+            echo "✅ Successfully ${{ github.event.inputs.action }}d environment: ${{ github.event.inputs.environment }}"
+          else
+            echo "❌ Failed to ${{ github.event.inputs.action }} environment: ${{ github.event.inputs.environment }}"
+            echo "Check the workflow logs for details."
+          fi

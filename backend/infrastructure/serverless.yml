@@ -1,0 +1,171 @@
+service: uw-waste-management
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-west-2'}
+  memorySize: 256
+  timeout: 30
+  logRetentionInDays: 30
+  environment:
+    NODE_ENV: ${self:provider.stage}
+    DYNAMODB_TABLE: ${self:service}-${self:provider.stage}
+  
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: !GetAtt WasteManagementTable.Arn
+
+package:
+  individually: true
+  patterns:
+    - '!node_modules/**'
+    - '!.git/**'
+    - '!.github/**'
+    - '!infrastructure/**'
+    - '!frontend/**'
+    - '!tests/**'
+    - '!docs/**'
+
+functions:
+  # API endpoints for waste management
+  getWasteItems:
+    handler: api/routes/waste.getWasteItems
+    events:
+      - httpApi:
+          path: /api/waste
+          method: get
+  
+  getWasteItemById:
+    handler: api/routes/waste.getWasteItemById
+    events:
+      - httpApi:
+          path: /api/waste/{id}
+          method: get
+  
+  createWasteItem:
+    handler: api/routes/waste.createWasteItem
+    events:
+      - httpApi:
+          path: /api/waste
+          method: post
+  
+  updateWasteItem:
+    handler: api/routes/waste.updateWasteItem
+    events:
+      - httpApi:
+          path: /api/waste/{id}
+          method: put
+  
+  deleteWasteItem:
+    handler: api/routes/waste.deleteWasteItem
+    events:
+      - httpApi:
+          path: /api/waste/{id}
+          method: delete
+  
+  # API endpoints for locations
+  getLocations:
+    handler: api/routes/locations.getLocations
+    events:
+      - httpApi:
+          path: /api/locations
+          method: get
+  
+  getLocationById:
+    handler: api/routes/locations.getLocationById
+    events:
+      - httpApi:
+          path: /api/locations/{id}
+          method: get
+  
+  createLocation:
+    handler: api/routes/locations.createLocation
+    events:
+      - httpApi:
+          path: /api/locations
+          method: post
+  
+  updateLocation:
+    handler: api/routes/locations.updateLocation
+    events:
+      - httpApi:
+          path: /api/locations/{id}
+          method: put
+  
+  deleteLocation:
+    handler: api/routes/locations.deleteLocation
+    events:
+      - httpApi:
+          path: /api/locations/{id}
+          method: delete
+  
+  # API endpoints for user management
+  getUserById:
+    handler: api/routes/users.getUserById
+    events:
+      - httpApi:
+          path: /api/users/{id}
+          method: get
+  
+  updateUser:
+    handler: api/routes/users.updateUser
+    events:
+      - httpApi:
+          path: /api/users/{id}
+          method: put
+  
+  getUserActivity:
+    handler: api/routes/users.getUserActivity
+    events:
+      - httpApi:
+          path: /api/users/{id}/activity
+          method: get
+  
+  # Authentication endpoints
+  login:
+    handler: api/routes/auth.login
+    events:
+      - httpApi:
+          path: /api/auth/login
+          method: post
+  
+  register:
+    handler: api/routes/auth.register
+    events:
+      - httpApi:
+          path: /api/auth/register
+          method: post
+  
+  # Background processing
+  processWasteData:
+    handler: api/waste-data.processWasteData
+    events:
+      - schedule: rate(1 day)
+
+resources:
+  Resources:
+    WasteManagementTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        SSESpecification:
+          SSEEnabled: true

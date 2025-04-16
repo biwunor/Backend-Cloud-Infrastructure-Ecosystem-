@@ -1,0 +1,226 @@
+name: Update Documentation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 1 * * 1'  # Run every Monday at 1 AM UTC
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/**'
+
+permissions:
+  contents: write
+
+jobs:
+  update-workflow-docs:
+    name: Update Workflow Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Collect workflow information
+        id: collect-info
+        run: |
+          mkdir -p .github/workflow-info
+          
+          echo "## Workflow Summary" > .github/workflow-info/summary.md
+          echo "" >> .github/workflow-info/summary.md
+          echo "| Workflow | Description | Triggers | Last Run |" >> .github/workflow-info/summary.md
+          echo "|----------|-------------|----------|----------|" >> .github/workflow-info/summary.md
+          
+          # Process each workflow file
+          for workflow_file in .github/workflows/*.yml; do
+            wf_name=$(basename "$workflow_file" .yml)
+            
+            # Skip this workflow to avoid recursion
+            if [ "$wf_name" = "documentation-update" ]; then
+              continue
+            fi
+            
+            # Extract workflow name and on section
+            workflow_name=$(grep -m 1 "name:" "$workflow_file" | sed 's/name: //g' | tr -d '"')
+            triggers=$(sed -n '/^on:/,/^jobs:/p' "$workflow_file" | sed '$d' | sed '1d' | sed 's/^  //g' | tr '\n' ',' | sed 's/,/, /g' | sed 's/, $//')
+            description=$(sed -n '2,5p' "$workflow_file" | grep -o "#.*" | sed 's/# //g' | head -1 || echo "No description")
+            
+            # Get last run time from GitHub API if token is available
+            last_run="N/A"
+            if [ -n "${{ secrets.GITHUB_TOKEN }}" ]; then
+              api_response=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/workflows/${wf_name}.yml/runs?per_page=1")
+              
+              last_run_date=$(echo "$api_response" | jq -r '.workflow_runs[0].created_at // "N/A"')
+              if [ "$last_run_date" != "N/A" ] && [ "$last_run_date" != "null" ]; then
+                last_run=$(date -d "$last_run_date" "+%Y-%m-%d %H:%M")
+              fi
+            fi
+            
+            # Add to summary table
+            echo "| [$workflow_name](.github/workflows/${wf_name}.yml) | $description | $triggers | $last_run |" >> .github/workflow-info/summary.md
+          done
+
+      - name: Update workflow README
+        run: |
+          # Create the workflows README file with the summary and details
+          cat > .github/README.md << 'EOL'
+          # GitHub Workflows
+          
+          This directory contains GitHub Actions workflows for CI/CD automation.
+          
+          EOL
+          
+          # Add the workflow summary
+          cat .github/workflow-info/summary.md >> .github/README.md
+          
+          # Add usage instructions
+          cat >> .github/README.md << 'EOL'
+          
+          ## Manual Workflow Execution
+          
+          Workflows can be executed manually from the Actions tab in GitHub or using the GitHub CLI:
+          
+          ```bash
+          # Install GitHub CLI if needed
+          # https://cli.github.com/manual/installation
+          
+          # Run a workflow
+          gh workflow run WORKFLOW_NAME.yml
+          
+          # Run with inputs (if supported by the workflow)
+          gh workflow run WORKFLOW_NAME.yml -f param1=value1 -f param2=value2
+          ```
+          
+          ## Adding New Workflows
+          
+          When adding new workflows, please follow these guidelines:
+          
+          1. Use clear, descriptive names for workflow files
+          2. Include a short description comment at the top of the file
+          3. Document inputs and outputs in the workflow file
+          4. Update the main workflow documentation in `.github/CICD-WORKFLOWS.md`
+          
+          ## Common Workflow Patterns
+          
+          ### Deployment Workflow Pattern
+          
+          ```yaml
+          name: Deploy to Environment
+          
+          on:
+            workflow_dispatch:
+              inputs:
+                environment:
+                  description: 'Environment to deploy to'
+                  required: true
+                  type: choice
+                  options:
+                    - dev
+                    - staging
+                    - prod
+          
+          jobs:
+            deploy:
+              name: Deploy
+              runs-on: ubuntu-latest
+              environment: ${{ github.event.inputs.environment }}
+              steps:
+                - name: Checkout code
+                  uses: actions/checkout@v3
+                # Additional deployment steps
+          ```
+          EOL
+          
+          # Update the main CICD-WORKFLOWS.md if it exists
+          if [ -f ".github/CICD-WORKFLOWS.md" ]; then
+            # Update the workflow badges section
+            sed -i '/^## Workflow Badges/,/^## Troubleshooting/c\
+          ## Workflow Badges\n\
+          The current status of workflows can be seen with the following badges:\n\
+          \n' .github/CICD-WORKFLOWS.md
+            
+            # Add badges for each workflow
+            for workflow_file in .github/workflows/*.yml; do
+              wf_name=$(basename "$workflow_file" .yml)
+              workflow_name=$(grep -m 1 "name:" "$workflow_file" | sed 's/name: //g' | tr -d '"')
+              normalized_name=$(echo "$workflow_name" | tr ' ' '_')
+              
+              # Add badge to documentation
+              echo "![${workflow_name}](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/${{ github.repository }}/main/.github/badges/${normalized_name}.json)" >> .github/CICD-WORKFLOWS.md
+            done
+            
+            # Add troubleshooting section back
+            echo -e "\n## Troubleshooting\n" >> .github/CICD-WORKFLOWS.md
+            sed -n '/^## Troubleshooting/,/^## Best Practices/p' .github/CICD-WORKFLOWS.md.bak >> .github/CICD-WORKFLOWS.md
+          fi
+
+      - name: Update workflow topology visualization
+        run: |
+          cat > .github/workflow-info/topology.mmd << 'EOL'
+          graph TD
+              subgraph "CI/CD Ecosystem"
+                  CI[CI Pipeline] --> GH[GitHub Pages Deploy]
+                  CI --> AWS[AWS Deploy]
+                  CI --> NF[Netlify Deploy]
+                  CI --> SEC[Security Scan]
+                  
+                  GH -.-> PM[Pipeline Manager]
+                  AWS -.-> PM
+                  NF -.-> PM
+                  SEC -.-> PM
+                  
+                  GH -.-> SB[Status Badges]
+                  AWS -.-> SB
+                  NF -.-> SB
+                  SEC -.-> SB
+                  
+                  EM[Environment Manager] --> AWS
+                  DOC[Documentation Update] -.-> PM
+              end
+              
+              subgraph "Deployment Targets"
+                  GH --> GHP[GitHub Pages]
+                  AWS --> S3[AWS S3 Frontend]
+                  AWS --> CF[AWS CloudFront]
+                  AWS --> APIG[AWS API Gateway]
+                  AWS --> LMB[AWS Lambda Backend]
+                  NF --> NFP[Netlify Pages]
+              end
+              
+              subgraph "External Services"
+                  SEC -.-> SL[Security Logs]
+                  PM -.-> RPT[Pipeline Reports]
+              end
+              
+              style CI fill:#f9f,stroke:#333,stroke-width:2px
+              style GH fill:#bbf,stroke:#333,stroke-width:2px
+              style AWS fill:#bbf,stroke:#333,stroke-width:2px
+              style NF fill:#bbf,stroke:#333,stroke-width:2px
+              style SEC fill:#fbf,stroke:#333,stroke-width:2px
+              style PM fill:#bfb,stroke:#333,stroke-width:2px
+              style SB fill:#bfb,stroke:#333,stroke-width:2px
+              style EM fill:#bfb,stroke:#333,stroke-width:2px
+              style DOC fill:#bfb,stroke:#333,stroke-width:2px
+          EOL
+          
+          # Add note about visualization
+          echo -e "\n## Workflow Topology\n" >> .github/README.md
+          echo "The CI/CD ecosystem topology can be visualized with Mermaid. The source diagram is in `.github/workflow-info/topology.mmd`." >> .github/README.md
+          echo -e "\n\`\`\`mermaid" >> .github/README.md
+          cat .github/workflow-info/topology.mmd >> .github/README.md
+          echo -e "\`\`\`" >> .github/README.md
+
+      - name: Commit documentation updates
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .github/README.md .github/workflow-info/
+          
+          # Check if CICD-WORKFLOWS.md was updated
+          if [ -f ".github/CICD-WORKFLOWS.md" ]; then
+            git add .github/CICD-WORKFLOWS.md
+          fi
+          
+          git commit -m "Update workflow documentation [skip ci]" || echo "No changes to commit"
+          git push

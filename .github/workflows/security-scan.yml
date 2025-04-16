@@ -1,0 +1,389 @@
+name: Security Scanning
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Run every Monday at 2 AM UTC
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of security scan to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - dependencies
+          - infrastructure
+          - code
+
+permissions:
+  contents: read
+  issues: write
+  security-events: write
+
+jobs:
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.scan_type == 'full' || github.event.inputs.scan_type == 'dependencies'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --json > npm-audit.json || true
+
+      - name: Run OSV scanner
+        uses: google/osv-scanner@v1
+        with:
+          config: osv-scanner.toml
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'UW-Waste-Management'
+          path: '.'
+          format: 'HTML'
+          out: 'reports'
+          args: >
+            --failOnCVSS 7
+            --enableRetired
+
+      - name: Upload dependency check report
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-check-report
+          path: reports/
+          retention-days: 30
+
+      - name: Create issue for critical vulnerabilities
+        if: ${{ failure() }}
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let auditData = {};
+            try {
+              auditData = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
+            } catch (error) {
+              console.log('Could not parse npm audit report');
+            }
+            
+            // Extract critical vulnerabilities
+            const criticalVulns = [];
+            if (auditData.vulnerabilities) {
+              for (const [pkg, details] of Object.entries(auditData.vulnerabilities)) {
+                if (details.severity === 'critical' || details.severity === 'high') {
+                  criticalVulns.push({
+                    package: pkg,
+                    severity: details.severity,
+                    title: details.title || 'Unknown',
+                    url: details.url || '',
+                    fixAvailable: details.fixAvailable || false
+                  });
+                }
+              }
+            }
+            
+            if (criticalVulns.length > 0) {
+              // Create issue with the findings
+              let vulnList = criticalVulns.map(v => 
+                `- **${v.package}**: ${v.title} (${v.severity}) ${v.fixAvailable ? '✅ Fix available' : '❌ No direct fix'} [Details](${v.url})`
+              ).join('\n');
+              
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🚨 Critical security vulnerabilities detected`,
+                body: `## Security Scan Results
+                
+                The scheduled security scan has detected **${criticalVulns.length} critical/high severity vulnerabilities** in project dependencies.
+                
+                ### Vulnerability Details
+                
+                ${vulnList}
+                
+                ### Recommended Actions
+                
+                1. Review the full dependency check report from workflow artifacts
+                2. Update affected dependencies to patched versions
+                3. Run \`npm audit fix\` to address fixable issues
+                4. Consider alternative packages if fixes are not available
+                
+                > This issue was automatically created by the security scanning workflow.
+                `,
+                labels: ['security', 'vulnerability', 'needs-attention']
+              });
+            }
+
+  infrastructure-scan:
+    name: Infrastructure Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.scan_type == 'full' || github.event.inputs.scan_type == 'infrastructure'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Install tfsec
+        run: |
+          curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+
+      - name: Run tfsec
+        run: |
+          tfsec infrastructure/aws/terraform --format=json > tfsec-results.json || true
+
+      - name: Install checkov
+        run: |
+          pip install checkov
+
+      - name: Run checkov on CloudFormation
+        run: |
+          checkov -f infrastructure/aws/cloudformation.yml --output json > checkov-cfn-results.json || true
+
+      - name: Run checkov on Terraform
+        run: |
+          checkov -d infrastructure/aws/terraform --output json > checkov-tf-results.json || true
+
+      - name: Analyze results
+        id: analyze
+        run: |
+          # Count issues by severity
+          TFSEC_HIGH=$(cat tfsec-results.json | jq '.results | map(select(.severity == "HIGH" or .severity == "CRITICAL")) | length')
+          CHECKOV_HIGH=$(cat checkov-cfn-results.json checkov-tf-results.json | jq -s 'map(.results.failed_checks | map(select(.severity == "HIGH" or .severity == "CRITICAL")) | length) | add')
+          
+          TOTAL_HIGH=$((TFSEC_HIGH + CHECKOV_HIGH))
+          echo "total_high_issues=${TOTAL_HIGH}" >> $GITHUB_OUTPUT
+          echo "Found ${TOTAL_HIGH} high/critical security issues in infrastructure"
+
+      - name: Upload scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: infrastructure-scan-results
+          path: |
+            tfsec-results.json
+            checkov-cfn-results.json
+            checkov-tf-results.json
+          retention-days: 30
+
+      - name: Create issue for infrastructure vulnerabilities
+        if: steps.analyze.outputs.total_high_issues != '0'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            // Load scan results
+            let tfsecResults = {};
+            let checkovCfnResults = {};
+            let checkovTfResults = {};
+            
+            try {
+              tfsecResults = JSON.parse(fs.readFileSync('tfsec-results.json', 'utf8'));
+              checkovCfnResults = JSON.parse(fs.readFileSync('checkov-cfn-results.json', 'utf8'));
+              checkovTfResults = JSON.parse(fs.readFileSync('checkov-tf-results.json', 'utf8'));
+            } catch (error) {
+              console.log('Could not parse one or more security scan reports');
+            }
+            
+            // Extract high severity issues
+            const highIssues = [];
+            
+            // tfsec issues
+            if (tfsecResults.results) {
+              for (const result of tfsecResults.results) {
+                if (result.severity === 'HIGH' || result.severity === 'CRITICAL') {
+                  highIssues.push({
+                    tool: 'tfsec',
+                    rule: result.rule_id,
+                    description: result.description,
+                    location: `${result.location.filename}:${result.location.start_line}`,
+                    severity: result.severity
+                  });
+                }
+              }
+            }
+            
+            // checkov CloudFormation issues
+            if (checkovCfnResults.results && checkovCfnResults.results.failed_checks) {
+              for (const check of checkovCfnResults.results.failed_checks) {
+                if (check.severity === 'HIGH' || check.severity === 'CRITICAL') {
+                  highIssues.push({
+                    tool: 'checkov (CloudFormation)',
+                    rule: check.check_id,
+                    description: check.check_name,
+                    location: `${check.file_path}:${check.file_line_range[0]}`,
+                    severity: check.severity
+                  });
+                }
+              }
+            }
+            
+            // checkov Terraform issues
+            if (checkovTfResults.results && checkovTfResults.results.failed_checks) {
+              for (const check of checkovTfResults.results.failed_checks) {
+                if (check.severity === 'HIGH' || check.severity === 'CRITICAL') {
+                  highIssues.push({
+                    tool: 'checkov (Terraform)',
+                    rule: check.check_id,
+                    description: check.check_name,
+                    location: `${check.file_path}:${check.file_line_range[0]}`,
+                    severity: check.severity
+                  });
+                }
+              }
+            }
+            
+            if (highIssues.length > 0) {
+              // Create issue with the findings
+              let issueList = highIssues.map(issue => 
+                `- **[${issue.severity}]** ${issue.description} (${issue.rule})\n  - Location: ${issue.location}\n  - Tool: ${issue.tool}`
+              ).join('\n\n');
+              
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🚨 Critical infrastructure security issues detected`,
+                body: `## Infrastructure Security Scan Results
+                
+                The infrastructure security scan has detected **${highIssues.length} high/critical severity issues** in your cloud infrastructure code.
+                
+                ### Security Issues
+                
+                ${issueList}
+                
+                ### Recommended Actions
+                
+                1. Review each identified issue in your infrastructure code
+                2. Apply security best practices to address these vulnerabilities
+                3. Reference the rule IDs in the tool documentation for remediation guidance
+                4. Re-run the security scan after making changes
+                
+                > This issue was automatically created by the security scanning workflow.
+                `,
+                labels: ['security', 'infrastructure', 'needs-attention']
+              });
+            }
+
+  code-scan:
+    name: Code Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.scan_type == 'full' || github.event.inputs.scan_type == 'code'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          upload-sarif: true
+          category: "/language:javascript"
+
+      - name: Install ESLint
+        run: |
+          npm install -g eslint @eslint/eslintrc eslint-plugin-security
+
+      - name: Run ESLint security scan
+        run: |
+          npx eslint --no-eslintrc -c .github/workflows/eslint-security.json --format json --output-file eslint-results.json "**/*.js" || true
+
+      - name: Upload ESLint results
+        uses: actions/upload-artifact@v3
+        with:
+          name: eslint-security-results
+          path: eslint-results.json
+          retention-days: 30
+
+  scan-report:
+    name: Generate Security Report
+    needs: [dependency-scan, infrastructure-scan, code-scan]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Generate consolidated report
+        run: |
+          mkdir -p reports
+          echo "# Security Scan Report" > reports/security-report.md
+          echo "" >> reports/security-report.md
+          echo "Date: $(date)" >> reports/security-report.md
+          echo "" >> reports/security-report.md
+          
+          echo "## Summary" >> reports/security-report.md
+          echo "" >> reports/security-report.md
+          
+          DEPENDENCY_STATUS="${{ needs.dependency-scan.result }}"
+          INFRASTRUCTURE_STATUS="${{ needs.infrastructure-scan.result }}"
+          CODE_STATUS="${{ needs.code-scan.result }}"
+          
+          echo "| Scan Type | Status |" >> reports/security-report.md
+          echo "|-----------|--------|" >> reports/security-report.md
+          echo "| Dependency Vulnerabilities | $DEPENDENCY_STATUS |" >> reports/security-report.md
+          echo "| Infrastructure Security | $INFRASTRUCTURE_STATUS |" >> reports/security-report.md
+          echo "| Code Security | $CODE_STATUS |" >> reports/security-report.md
+          echo "" >> reports/security-report.md
+          
+          echo "## Details" >> reports/security-report.md
+          echo "" >> reports/security-report.md
+          echo "For detailed scan results, please download the artifacts from this workflow run." >> reports/security-report.md
+
+      - name: Upload consolidated report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-scan-report
+          path: reports/security-report.md
+          retention-days: 30
+
+      - name: Create report issue
+        if: github.event_name == 'schedule' || github.event.inputs.scan_type == 'full'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            const reportContent = fs.readFileSync('reports/security-report.md', 'utf8');
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🔒 Security Scan Report - ${new Date().toISOString().split('T')[0]}`,
+              body: reportContent + `
+              
+              ### Next Steps
+              
+              1. Review the detailed scan reports in workflow artifacts
+              2. Address any high/critical security issues
+              3. Document exceptions or mitigations for issues that cannot be addressed immediately
+              
+              > This report was automatically generated by the security scanning workflow.
+              `,
+              labels: ['security', 'report']
+            });

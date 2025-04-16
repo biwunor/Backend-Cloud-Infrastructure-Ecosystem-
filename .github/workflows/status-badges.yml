@@ -1,0 +1,120 @@
+name: Deployment Status Badges
+
+on:
+  workflow_run:
+    workflows:
+      - "CI Pipeline"
+      - "Deploy to GitHub Pages"
+      - "Deploy to AWS"
+      - "Deploy to Netlify"
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  deployments: read
+
+jobs:
+  update-badges:
+    name: Update Status Badges
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Get workflow status
+        id: get-workflow-status
+        if: github.event_name == 'workflow_run'
+        run: |
+          echo "workflow_name=$(echo '${{ github.event.workflow_run.name }}' | tr ' ' '_' | tr -cd '[:alnum:]_-')" >> $GITHUB_ENV
+          echo "workflow_conclusion=${{ github.event.workflow_run.conclusion }}" >> $GITHUB_ENV
+
+      - name: Get latest workflow runs
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p .github/badges
+          
+          # Function to get latest workflow status
+          function get_latest_status() {
+            WORKFLOW_NAME=$1
+            WORKFLOW_FILE=$2
+            
+            # Get latest run for this workflow
+            LATEST_RUN=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=1" | \
+              jq -r '.workflow_runs[0].conclusion')
+            
+            # Create badge
+            if [ "$LATEST_RUN" == "success" ]; then
+              COLOR="green"
+            elif [ "$LATEST_RUN" == "failure" ]; then
+              COLOR="red"
+            else
+              COLOR="yellow"
+              LATEST_RUN="pending"
+            fi
+            
+            NORMALIZED_NAME=$(echo "$WORKFLOW_NAME" | tr ' ' '_' | tr -cd '[:alnum:]_-')
+            echo "Creating badge for $NORMALIZED_NAME: $LATEST_RUN"
+            
+            # GitHub does not allow modifying repository files in this context
+            # so we create local files to commit
+            BADGE_JSON=$(cat <<EOF
+            {
+              "schemaVersion": 1,
+              "label": "$WORKFLOW_NAME",
+              "message": "$LATEST_RUN",
+              "color": "$COLOR"
+            }
+            EOF
+            )
+            
+            echo "$BADGE_JSON" > .github/badges/${NORMALIZED_NAME}.json
+          }
+          
+          # Update badges for all workflows
+          get_latest_status "CI Pipeline" "ci.yml"
+          get_latest_status "GitHub Pages" "github-pages-deploy.yml"
+          get_latest_status "AWS Deployment" "aws-deploy.yml"
+          get_latest_status "Netlify" "netlify-deploy.yml"
+
+      - name: Create badge for triggered workflow
+        if: github.event_name == 'workflow_run'
+        run: |
+          mkdir -p .github/badges
+          
+          # Set badge color based on conclusion
+          if [ "${{ env.workflow_conclusion }}" == "success" ]; then
+            COLOR="green"
+          elif [ "${{ env.workflow_conclusion }}" == "failure" ]; then
+            COLOR="red"
+          else
+            COLOR="yellow"
+          fi
+          
+          # Create badge JSON
+          BADGE_JSON=$(cat <<EOF
+          {
+            "schemaVersion": 1,
+            "label": "${{ github.event.workflow_run.name }}",
+            "message": "${{ env.workflow_conclusion }}",
+            "color": "$COLOR"
+          }
+          EOF
+          )
+          
+          echo "$BADGE_JSON" > .github/badges/${{ env.workflow_name }}.json
+
+      - name: Commit badge updates
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .github/badges
+          git commit -m "Update deployment status badges [skip ci]" || echo "No changes to commit"
+          git push

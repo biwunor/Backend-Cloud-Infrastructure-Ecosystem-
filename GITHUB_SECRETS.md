@@ -1,103 +1,84 @@
-# Setting Up GitHub Secrets for CI/CD
+# GitHub Secrets Configuration
 
-This guide explains how to set up the necessary secrets in your GitHub repository for the CI/CD workflows.
+This document provides instructions for setting up the required secrets for automated deployments via GitHub Actions.
 
-## What are GitHub Secrets?
+## Required Secrets by Deployment Target
 
-GitHub Secrets are encrypted environment variables that you can create for a repository. These secrets are available to GitHub Actions workflows and help you keep sensitive data like API tokens, access keys, and credentials secure.
+### AWS Deployment
 
-## Accessing GitHub Secrets Settings
+| Secret Name | Description | Format |
+|-------------|-------------|--------|
+| `AWS_ACCESS_KEY_ID` | AWS access key ID | `AKIAXXXXXXXXXXXXXXXX` |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret access key | `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
+| `AWS_REGION` | Default AWS region for deployment | `us-west-2` |
+| `API_URL` | API URL for frontend to connect to backend | `https://api.example.com` |
 
-1. Navigate to your GitHub repository
-2. Click on the "Settings" tab
-3. In the left sidebar, click on "Secrets and variables" then "Actions"
-4. Click on "New repository secret" to add a new secret
+#### How to Create AWS Credentials
 
-## Required Secrets for Different Deployment Options
+1. Log in to the [AWS Console](https://console.aws.amazon.com/)
+2. Navigate to IAM > Users > Add User
+3. Set a username (e.g., `github-actions-deploy`)
+4. Select "Programmatic access" for Access type
+5. Attach the following policies:
+   - `AmazonS3FullAccess`
+   - `CloudFrontFullAccess`
+   - `AmazonDynamoDBFullAccess`
+   - `AmazonAPIGatewayAdministrator`
+   - `AWSLambda_FullAccess`
+   - `IAMFullAccess`
+   - `AmazonECR-FullAccess`
+   - `AmazonECS-FullAccess`
+   - `CloudWatchLogsFullAccess`
+6. Review and create the user
+7. Save the access key ID and secret access key
 
-Depending on your chosen deployment method, you'll need to set up different secrets:
+### Netlify Deployment
 
-### For GitHub Pages Deployment
-
-GitHub Pages deployment doesn't require any special secrets as it uses the GITHUB_TOKEN that's automatically available to GitHub Actions.
-
-### For AWS Deployment
-
-For AWS S3 and CloudFront deployment, add these secrets:
-
-| Secret Name | Description |
-|-------------|-------------|
-| `AWS_ACCESS_KEY_ID` | Your AWS access key ID |
-| `AWS_SECRET_ACCESS_KEY` | Your AWS secret access key |
-| `AWS_S3_BUCKET` | The name of your S3 bucket |
-| `CLOUDFRONT_DISTRIBUTION_ID` | (Optional) Your CloudFront distribution ID for cache invalidation |
-
-#### How to Get AWS Credentials
-
-1. Log in to your AWS Management Console
-2. Navigate to IAM (Identity and Access Management)
-3. Create a new user or select an existing one
-4. Create a new access key or use an existing one
-5. Make sure the user has appropriate permissions for S3 and CloudFront
-   - `AmazonS3FullAccess` for S3 operations
-   - `CloudFrontFullAccess` for CloudFront operations
-
-### For Netlify Deployment
-
-For Netlify deployment, add these secrets:
-
-| Secret Name | Description |
-|-------------|-------------|
-| `NETLIFY_AUTH_TOKEN` | Your Netlify personal access token |
-| `NETLIFY_SITE_ID` | The site ID for your Netlify site |
+| Secret Name | Description | Format |
+|-------------|-------------|--------|
+| `NETLIFY_AUTH_TOKEN` | Netlify personal access token | `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
+| `NETLIFY_SITE_ID` | Netlify site ID | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
+| `API_URL` | API URL for frontend to connect to backend | `https://api.example.com` |
 
 #### How to Get Netlify Credentials
 
-1. **For NETLIFY_AUTH_TOKEN**:
-   - Log in to your Netlify account
-   - Go to User Settings > Applications
-   - Under "Personal access tokens", click "New access token"
-   - Give it a description and click "Generate token"
-   - Copy the token immediately (it won't be shown again)
+1. Log in to [Netlify](https://app.netlify.com/)
+2. Go to User Settings > Applications > Personal access tokens
+3. Generate a new access token with a description (e.g., `GitHub Actions`)
+4. For the site ID, go to Site settings > General > Site details > Site ID
 
-2. **For NETLIFY_SITE_ID**:
-   - Go to your Netlify site
-   - Go to Site settings > General > Site details
-   - The Site ID is listed in the Site information section
+### GitHub Pages Deployment
 
-## Firebase Configuration Secrets (If Applicable)
+For GitHub Pages, fewer secrets are required since the deployment happens within GitHub:
 
-If your application uses Firebase, you might want to add Firebase configuration as secrets:
+| Secret Name | Description | Format |
+|-------------|-------------|--------|
+| `API_URL` | API URL for frontend to connect to backend | `https://api.example.com` |
 
-| Secret Name | Description |
-|-------------|-------------|
-| `FIREBASE_API_KEY` | Your Firebase API key |
-| `FIREBASE_AUTH_DOMAIN` | Your Firebase auth domain |
-| `FIREBASE_PROJECT_ID` | Your Firebase project ID |
-| `FIREBASE_STORAGE_BUCKET` | Your Firebase storage bucket |
-| `FIREBASE_MESSAGING_SENDER_ID` | Your Firebase messaging sender ID |
-| `FIREBASE_APP_ID` | Your Firebase app ID |
+## Adding Secrets to GitHub Repository
 
-These can be found in your Firebase project settings.
+1. Navigate to your repository on GitHub
+2. Go to Settings > Secrets and variables > Actions
+3. Click "New repository secret"
+4. Enter the secret name and value
+5. Click "Add secret"
 
-## Using Secrets in GitHub Actions
+## Testing Secret Configuration
 
-These secrets are automatically available in your GitHub Actions workflows using the syntax:
+You can verify your secrets are properly configured by manually triggering a workflow:
 
-```yaml
-${{ secrets.SECRET_NAME }}
-```
+1. Navigate to your repository on GitHub
+2. Go to Actions > Select a workflow
+3. Click "Run workflow"
+4. Choose the branch to run the workflow on
+5. Click "Run workflow"
 
-For example, in the AWS deployment workflow, the AWS access key is referenced as:
-
-```yaml
-env:
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-```
+Monitor the workflow execution for any errors related to missing or incorrect secrets.
 
 ## Security Best Practices
 
-- Never commit sensitive credentials directly to your repository
-- Regularly rotate your access keys and tokens
-- Use the principle of least privilege when assigning permissions to access keys
-- Audit your secrets periodically and remove any that are no longer needed
+- Rotate your AWS access keys regularly
+- Use IAM roles with least privilege principles
+- Never commit secrets directly to the repository
+- Consider using OIDC for AWS authentication instead of long-lived access keys
+- Review and audit your secrets periodically

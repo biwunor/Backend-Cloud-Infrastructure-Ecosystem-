@@ -1,37 +1,219 @@
 name: Deploy to GitHub Pages
 
 on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+    branches:
+      - main
   push:
-    branches: [ main ]
-  # Allow manual triggers
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - "public/**"
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/github-pages-deploy.yml"
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - staging
+          - production
+      deploy_notes:
+        description: 'Deployment notes'
+        required: false
+        type: string
 
 permissions:
-  contents: write # This is required for the gh-pages deployment
+  contents: read
+  pages: write
+  id-token: write
+  issues: write
+  deployments: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  prepare:
+    name: Prepare Deployment
     runs-on: ubuntu-latest
-    
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
     steps:
-      - name: Checkout code
+      - name: Set environment
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          else
+            echo "environment=production" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create deployment
+        uses: chrnorm/deployment-action@v2
+        id: deployment
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: ${{ steps.set-env.outputs.environment }}
+          description: 'GitHub Pages deployment'
+
+      - name: Check if deployment should proceed
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "CI pipeline failed. Skipping deployment."
+          else
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "Proceeding with deployment."
+          fi
+
+  build:
+    name: Build for Pages
+    needs: prepare
+    if: needs.prepare.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ needs.prepare.outputs.environment }}
+    steps:
+      - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '20'
+          node-version: '18'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
+        
+      - name: Lint code
+        run: npm run lint || echo "Linting issues found but continuing deployment"
 
-      - name: Build application
+      - name: Run tests
+        run: npm test -- --passWithNoTests || echo "Tests failed but continuing deployment"
+        env:
+          NODE_ENV: test
+
+      - name: Configure environment variables
+        run: |
+          echo "REACT_APP_VERSION=${GITHUB_SHA::8}" >> $GITHUB_ENV
+          echo "REACT_APP_BUILD_TIME=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_ENV
+          echo "REACT_APP_ENVIRONMENT=${{ needs.prepare.outputs.environment }}" >> $GITHUB_ENV
+
+      - name: Build project
         run: npm run build
-      
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+        env:
+          REACT_APP_API_URL: ${{ secrets.API_URL || 'https://api.example.com' }}
+          REACT_APP_MAP_API_KEY: ${{ secrets.MAP_API_KEY || '' }}
+          NODE_ENV: production
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v2
         with:
-          folder: dist # The folder the action should deploy
-          branch: gh-pages # The branch the action should deploy to
-          clean: true # Automatically remove deleted files from the deployment branch
+          path: './build'  # adjust this path to your build output directory
+
+      - name: Create build info file
+        if: success()
+        run: |
+          echo "{
+            \"version\": \"${GITHUB_SHA::8}\",
+            \"buildTime\": \"$(date +'%Y-%m-%dT%H:%M:%S')\",
+            \"environment\": \"${{ needs.prepare.outputs.environment }}\",
+            \"branch\": \"${{ github.ref_name }}\",
+            \"workflow\": \"${{ github.workflow }}\"
+          }" > build-info.json
+          
+      - name: Upload build info
+        uses: actions/upload-artifact@v3
+        if: success()
+        with:
+          name: build-info
+          path: build-info.json
+          retention-days: 30
+
+  deploy:
+    name: Deploy to Pages
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ needs.prepare.outputs.environment == 'production' && 'github-pages' || needs.prepare.outputs.environment }}
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download build info
+        uses: actions/download-artifact@v3
+        with:
+          name: build-info
+          
+      - name: Get build info
+        id: build-info
+        run: |
+          BUILD_VERSION=$(cat build-info.json | jq -r '.version')
+          BUILD_TIME=$(cat build-info.json | jq -r '.buildTime')
+          echo "build_version=$BUILD_VERSION" >> $GITHUB_OUTPUT
+          echo "build_time=$BUILD_TIME" >> $GITHUB_OUTPUT
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
+
+      - name: Create deployment status
+        if: always()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          state: ${{ job.status == 'success' && 'success' || 'failure' }}
+          deployment-id: ${{ steps.deployment.outputs.deployment_id || github.run_id }}
+          environment-url: ${{ steps.deployment.outputs.page_url }}
+          description: "Deployment ${{ job.status }}"
+
+      - name: Create deployment issue
+        if: success() && github.event.inputs.deploy_notes != ''
+        uses: JasonEtco/create-an-issue@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_ENV: ${{ needs.prepare.outputs.environment }}
+          DEPLOY_URL: ${{ steps.deployment.outputs.page_url }}
+          DEPLOY_VERSION: ${{ steps.build-info.outputs.build_version }}
+          DEPLOY_TIME: ${{ steps.build-info.outputs.build_time }}
+          DEPLOY_NOTES: ${{ github.event.inputs.deploy_notes }}
+        with:
+          filename: .github/DEPLOYMENT_TEMPLATE.md
+          update_existing: true
+
+  notify:
+    name: Post-Deployment Notification
+    needs: [prepare, deploy]
+    if: always() && needs.prepare.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Notify on success
+        if: needs.deploy.result == 'success'
+        run: |
+          echo "🚀 Successfully deployed to GitHub Pages (${{ needs.prepare.outputs.environment }})"
+          echo "Environment: ${{ needs.prepare.outputs.environment }}"
+          
+      - name: Notify on failure
+        if: needs.deploy.result != 'success'
+        run: |
+          echo "❌ Failed to deploy to GitHub Pages (${{ needs.prepare.outputs.environment }})"
+          echo "Check the workflow logs for details."

@@ -1,118 +1,123 @@
-# UW Help App Deployment Guide
+# UW Waste Management App - Deployment Quick Help
 
-This document provides a guide for using the deployment utilities provided with this project.
+This document provides quick troubleshooting tips for common deployment issues.
 
-## Deployment Options
+## Quick Reference
 
-The UW Help App supports deployment to the following platforms:
+| Platform | Command | Notes |
+|----------|---------|-------|
+| AWS S3/CloudFront | `cd infrastructure/aws && ./deploy-cloudformation.sh --environment dev` | Frontend deployment |
+| AWS Lambda | `cd backend && serverless deploy --stage dev` | Backend API deployment |
+| AWS ECS | `cd infrastructure/aws && ./deploy-ecs.sh --environment dev --account YOUR_ACCOUNT_ID` | Containerized deployment |
+| GitHub Pages | Auto-deployed via GitHub Actions | Frontend only |
+| Netlify | Auto-deployed via GitHub Actions | Frontend only |
+| Docker Local | `docker-compose up` | Development environment |
+| Docker Production | `cd infrastructure/docker && docker-compose -f docker-compose.prod.yml up -d` | Production environment |
 
-1. GitHub Pages
-2. AWS S3 + CloudFront
-3. Netlify
+## Common Issues
 
-## Using the Deployment Utility
+### 1. Authentication Issues
 
-We've included a handy deployment utility script to simplify the process of deploying to different platforms.
-
-### Running the Utility
-
-To run the deployment utility, execute:
-
-```bash
-node deploy.js
+**AWS**
+```
+Error: An error occurred (AccessDenied) when calling the CreateStack operation: User: arn:aws:iam::123456789012:user/username is not authorized to perform: cloudformation:CreateStack
 ```
 
-This will provide an interactive menu where you can select your desired deployment target.
+**Solution**: Check your AWS credentials and IAM permissions. Ensure the user has sufficient permissions for the services being deployed.
 
-### GitHub Pages Deployment
+### 2. CloudFormation/Terraform Deployment Failures
 
-For GitHub Pages deployment:
-
-1. Run `node deploy.js`
-2. Select option 1 for GitHub Pages
-3. If prompted, enter your GitHub Pages URL (e.g., https://username.github.io/repo-name/)
-4. The script will build and deploy the application
-
-You can also deploy directly using:
-
-```bash
-npm run predeploy
-npm run deploy
+**Error**:
+```
+Error: Error creating CloudFormation stack: AlreadyExistsException: Stack [stack-name] already exists
 ```
 
-### AWS S3 + CloudFront Deployment
-
-For AWS deployment:
-
-1. First, ensure the AWS CLI is installed and configured with appropriate credentials
-2. Run `node deploy.js`
-3. Select option 2 for AWS S3 + CloudFront
-4. Enter your S3 bucket name when prompted
-5. Optionally, enter your CloudFront distribution ID for cache invalidation
-
-Manual AWS deployment can be done with:
+**Solution**: Use update-stack instead of create-stack, or delete the existing stack first.
 
 ```bash
-npm run build
-aws s3 sync dist/ s3://your-bucket-name --delete
-aws cloudfront create-invalidation --distribution-id your-distribution-id --paths "/*"
+aws cloudformation delete-stack --stack-name stack-name
 ```
 
-### Netlify Deployment
+### 3. Docker Issues
 
-For Netlify deployment:
+**Error**:
+```
+Error response from daemon: Conflict. The container name "/container-name" is already in use.
+```
 
-1. Ensure Netlify CLI is installed (`npm install netlify-cli -g`)
-2. Run `node deploy.js`
-3. Select option 3 for Netlify
-4. If not logged in, the script will prompt you to log in to Netlify
-5. Choose whether to create a new site or deploy to an existing one
-
-Manual Netlify deployment can be done with:
+**Solution**: Remove the existing container or use a different name.
 
 ```bash
-npm run build
-netlify deploy --dir=dist --prod
+docker rm -f container-name
 ```
 
-## Automated CI/CD Deployments
+### 4. Serverless Deployment Issues
 
-This project is also configured for automated CI/CD deployments using GitHub Actions:
+**Error**:
+```
+Error: The security token included in the request is invalid
+```
 
-- `.github/workflows/github-pages-deploy.yml` handles GitHub Pages deployments
-- `.github/workflows/aws-deploy.yml` handles AWS deployments
-- `.github/workflows/netlify-deploy.yml` handles Netlify deployments
+**Solution**: Check your AWS credentials and ensure they're properly configured.
 
-These workflows are triggered automatically when code is pushed to the main branch.
+```bash
+aws configure
+```
 
-## Required Secrets for CI/CD
+### 5. Environment Variables Not Working
 
-For the CI/CD workflows to function properly, you'll need to add specific secrets to your GitHub repository:
+**Problem**: Application can't access environment variables.
 
-### For AWS Deployment
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_S3_BUCKET`
-- `CLOUDFRONT_DISTRIBUTION_ID`
+**Solution**: 
+- For React apps, ensure variables are prefixed with `REACT_APP_`
+- For serverless, check that variables are properly defined in serverless.yml
+- For Docker, verify they're set in docker-compose.yml
 
-### For Netlify Deployment
-- `NETLIFY_AUTH_TOKEN`
-- `NETLIFY_SITE_ID`
+### 6. Network/CORS Issues
 
-Refer to the [GITHUB_SECRETS.md](./GITHUB_SECRETS.md) file for detailed instructions on how to add these secrets.
+**Problem**: Frontend can't communicate with backend API due to CORS.
 
-## Testing the Build Locally
+**Solution**: 
+- Ensure API Gateway has proper CORS configuration
+- For local development, check that backend allows localhost origins
+- For production, verify that API domain is allowed in CORS config
 
-Before deploying, you can test the production build locally:
+## Quick Commands
 
-1. Build the project:
-   ```bash
-   npm run build
-   ```
+### Check Deployment Status
 
-2. Serve the production build:
-   ```bash
-   node serve.js
-   ```
+```bash
+# AWS CloudFormation stack status
+aws cloudformation describe-stacks --stack-name stack-name
 
-3. Open your browser and navigate to `http://localhost:3000`
+# Serverless info
+serverless info --stage dev
+
+# Docker containers
+docker ps
+
+# Docker logs
+docker logs container-name
+```
+
+### Rollback or Delete Deployments
+
+```bash
+# Delete CloudFormation stack
+aws cloudformation delete-stack --stack-name stack-name
+
+# Remove serverless deployment
+serverless remove --stage dev
+
+# Stop Docker containers
+docker-compose down
+```
+
+## Getting More Help
+
+For detailed deployment instructions, refer to the full [DEPLOYMENT.md](./DEPLOYMENT.md) document.
+
+If your issue isn't covered here, check:
+1. AWS or relevant platform documentation
+2. Project GitHub issues
+3. Serverless Framework or Docker documentation
