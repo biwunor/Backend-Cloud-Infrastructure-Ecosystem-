@@ -1,34 +1,96 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'CloudFormation template for UW Waste Management Application'
+Description: 'UW Waste Management Application - Advanced Infrastructure'
 
 Parameters:
   Environment:
-    Description: Environment (dev, staging, prod)
     Type: String
     Default: dev
     AllowedValues:
       - dev
       - staging
       - prod
+    Description: Environment name
+  
   DomainName:
-    Description: Domain name for the application
-    Type: String
-    Default: uw-waste-management.example.com
-  CertificateARN:
-    Description: ARN of ACM certificate for HTTPS
     Type: String
     Default: ''
+    Description: (Optional) Custom domain name for the application
+
+  CertificateArn:
+    Type: String
+    Default: ''
+    Description: (Optional) ARN of ACM certificate for custom domain
+
+  CreateWAF:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to create a WAF for the application
+
+  EnableCloudFrontLogs:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to enable CloudFront access logs
+
+  EnableAlarms:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Whether to enable CloudWatch Alarms
+
+  ErrorNotificationEmail:
+    Type: String
+    Default: ''
+    Description: (Optional) Email for error notifications
 
 Conditions:
+  HasCustomDomain: !Not [!Equals [!Ref DomainName, '']]
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, '']]
+  CreateWAFResources: !Equals [!Ref CreateWAF, 'true']
+  EnableCloudFrontLogging: !Equals [!Ref EnableCloudFrontLogs, 'true']
+  EnableAlarmResources: !Equals [!Ref EnableAlarms, 'true']
+  HasErrorNotificationEmail: !Not [!Equals [!Ref ErrorNotificationEmail, '']]
   IsProduction: !Equals [!Ref Environment, 'prod']
-  HasCertificate: !Not [!Equals [!Ref CertificateARN, '']]
+
+Mappings:
+  EnvironmentMap:
+    dev:
+      S3Prefix: dev
+      CacheControl: 'max-age=60'
+      PriceClass: PriceClass_100
+      MinTTL: 60
+      DefaultTTL: 300
+      MaxTTL: 3600
+    staging:
+      S3Prefix: staging
+      CacheControl: 'max-age=300'
+      PriceClass: PriceClass_100
+      MinTTL: 60
+      DefaultTTL: 300
+      MaxTTL: 86400
+    prod:
+      S3Prefix: prod
+      CacheControl: 'max-age=86400'
+      PriceClass: PriceClass_All
+      MinTTL: 60
+      DefaultTTL: 86400
+      MaxTTL: 31536000
 
 Resources:
-  # S3 Bucket for frontend files
-  FrontendBucket:
+  # S3 Bucket for Website Content
+  S3Bucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
     Properties:
-      BucketName: !Sub 'uw-waste-management-frontend-${Environment}'
+      BucketName: !Sub uw-waste-management-${Environment}-${AWS::AccountId}
       AccessControl: Private
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
@@ -39,78 +101,182 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 30
+          - Id: CleanupIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
       VersioningConfiguration:
         Status: Enabled
+      LoggingConfiguration:
+        !If
+          - EnableCloudFrontLogging
+          - DestinationBucketName: !Ref LoggingBucket
+            LogFilePrefix: !Sub s3-access-logs/${Environment}/
+          - !Ref AWS::NoValue
       Tags:
         - Key: Environment
           Value: !Ref Environment
         - Key: Project
           Value: UW-Waste-Management
 
-  # S3 Bucket policy to allow CloudFront access
-  FrontendBucketPolicy:
+  # Bucket Policy for CloudFront Access
+  S3BucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket: !Ref FrontendBucket
+      Bucket: !Ref S3Bucket
       PolicyDocument:
         Statement:
-          - Action: s3:GetObject
+          - Action:
+              - s3:GetObject
             Effect: Allow
-            Resource: !Sub 'arn:aws:s3:::${FrontendBucket}/*'
+            Resource: !Sub arn:aws:s3:::${S3Bucket}/*
             Principal:
-              CanonicalUser: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
+              Service: cloudfront.amazonaws.com
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}
+
+  # Logging Bucket
+  LoggingBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub uw-waste-management-logs-${Environment}-${AWS::AccountId}
+      AccessControl: LogDeliveryWrite
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldLogs
+            Status: Enabled
+            ExpirationInDays: 365
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: UW-Waste-Management
+
+  # Log Bucket Policy
+  LoggingBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LoggingBucket
+      PolicyDocument:
+        Statement:
+          - Action:
+              - s3:PutObject
+            Effect: Allow
+            Resource: !Sub arn:aws:s3:::${LoggingBucket}/*
+            Principal:
+              Service: 
+                - cloudfront.amazonaws.com
+                - logging.s3.amazonaws.com
+          - Action:
+              - s3:GetBucketAcl
+            Effect: Allow
+            Resource: !Sub arn:aws:s3:::${LoggingBucket}
+            Principal:
+              Service: 
+                - cloudfront.amazonaws.com
+                - logging.s3.amazonaws.com
 
   # CloudFront Origin Access Identity
   CloudFrontOriginAccessIdentity:
     Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
     Properties:
       CloudFrontOriginAccessIdentityConfig:
-        Comment: !Sub 'OAI for UW Waste Management ${Environment}'
+        Comment: !Sub Origin access identity for ${S3Bucket}
+
+  # CloudFront Cache Policy
+  CloudFrontCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub uw-waste-management-cache-policy-${Environment}
+        Comment: Cache policy for UW Waste Management app
+        DefaultTTL: !FindInMap [EnvironmentMap, !Ref Environment, DefaultTTL]
+        MaxTTL: !FindInMap [EnvironmentMap, !Ref Environment, MaxTTL]
+        MinTTL: !FindInMap [EnvironmentMap, !Ref Environment, MinTTL]
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
 
   # CloudFront Distribution
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
+        Aliases: !If 
+          - HasCustomDomain
+          - - !Ref DomainName
+          - !Ref AWS::NoValue
+        Origins:
+          - DomainName: !GetAtt S3Bucket.RegionalDomainName
+            Id: S3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}
         Enabled: true
-        DefaultRootObject: index.html
-        PriceClass: PriceClass_100
         HttpVersion: http2
-        IPV6Enabled: true
+        DefaultRootObject: index.html
+        PriceClass: !FindInMap [EnvironmentMap, !Ref Environment, PriceClass]
         ViewerCertificate:
-          !If 
+          !If
             - HasCertificate
-            - AcmCertificateArn: !Ref CertificateARN
+            - AcmCertificateArn: !Ref CertificateArn
               MinimumProtocolVersion: TLSv1.2_2021
               SslSupportMethod: sni-only
             - CloudFrontDefaultCertificate: true
-        Origins:
-          - DomainName: !GetAtt FrontendBucket.DomainName
-            Id: S3Origin
-            S3OriginConfig:
-              OriginAccessIdentity: !Sub 'origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}'
         DefaultCacheBehavior:
-          TargetOriginId: S3Origin
-          ForwardedValues:
-            QueryString: false
-            Cookies:
-              Forward: none
-          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
           Compress: true
-          DefaultTTL: 86400
-          MinTTL: 0
-          MaxTTL: 31536000
+          CachePolicyId: !Ref CloudFrontCachePolicy
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
         CustomErrorResponses:
           - ErrorCode: 404
             ResponseCode: 200
             ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 30
           - ErrorCode: 403
             ResponseCode: 200
             ResponsePagePath: /index.html
-        Aliases:
-          !If 
-            - HasCertificate
-            - - !Ref DomainName
+            ErrorCachingMinTTL: 30
+        WebACLId: !If 
+          - CreateWAFResources
+          - !GetAtt WebACL.Arn
+          - !Ref AWS::NoValue
+        Logging:
+          !If
+            - EnableCloudFrontLogging
+            - Bucket: !GetAtt LoggingBucket.RegionalDomainName
+              IncludeCookies: false
+              Prefix: !Sub cloudfront-logs/${Environment}/
             - !Ref AWS::NoValue
         Tags:
           - Key: Environment
@@ -118,105 +284,193 @@ Resources:
           - Key: Project
             Value: UW-Waste-Management
 
-  # DynamoDB Table
-  WasteManagementTable:
-    Type: AWS::DynamoDB::Table
+  # WAF Web ACL for CloudFront
+  WebACL:
+    Type: AWS::WAFv2::WebACL
+    Condition: CreateWAFResources
     Properties:
-      TableName: !Sub 'uw-waste-management-${Environment}'
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-      SSESpecification:
-        SSEEnabled: true
+      Name: !Sub uw-waste-management-waf-${Environment}
+      Scope: CLOUDFRONT
+      Description: WAF for UW Waste Management application
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub UWWasteManagementWAF${Environment}
+      Rules:
+        - Name: AWS-AWSManagedRulesCommonRuleSet
+          Priority: 0
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesCommonRuleSet
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+        - Name: AWS-AWSManagedRulesKnownBadInputsRuleSet
+          Priority: 1
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AWS-AWSManagedRulesKnownBadInputsRuleSet
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+        - Name: RateLimit
+          Priority: 2
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: RateLimit
+          Statement:
+            RateBasedStatement:
+              Limit: 1000
+              AggregateKeyType: IP
       Tags:
         - Key: Environment
           Value: !Ref Environment
         - Key: Project
           Value: UW-Waste-Management
 
-  # Lambda Execution Role
-  LambdaExecutionRole:
-    Type: AWS::IAM::Role
+  # SNS Topic for Alarms
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: EnableAlarmResources
     Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: DynamoDBAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - dynamodb:GetItem
-                  - dynamodb:PutItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:DeleteItem
-                  - dynamodb:Query
-                  - dynamodb:Scan
-                Resource: !GetAtt WasteManagementTable.Arn
-
-  # API Gateway
-  ApiGateway:
-    Type: AWS::ApiGatewayV2::Api
-    Properties:
-      Name: !Sub 'uw-waste-management-api-${Environment}'
-      ProtocolType: HTTP
-      Description: API Gateway for UW Waste Management Backend
+      DisplayName: !Sub UW-Waste-Management-Alarms-${Environment}
+      TopicName: !Sub uw-waste-management-alarms-${Environment}
       Tags:
-        Environment: !Ref Environment
-        Project: UW-Waste-Management
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: UW-Waste-Management
 
-  # API Gateway Stage
-  ApiGatewayStage:
-    Type: AWS::ApiGatewayV2::Stage
+  # SNS Subscription for Email Notifications
+  AlarmTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasErrorNotificationEmail
     Properties:
-      ApiId: !Ref ApiGateway
-      StageName: !Ref Environment
-      AutoDeploy: true
-      DefaultRouteSettings:
-        DetailedMetricsEnabled: true
-      Tags:
-        Environment: !Ref Environment
-        Project: UW-Waste-Management
+      TopicArn: !Ref AlarmTopic
+      Protocol: email
+      Endpoint: !Ref ErrorNotificationEmail
+
+  # CloudWatch Alarm for Error Rate
+  ErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAlarmResources
+    Properties:
+      AlarmName: !Sub UW-Waste-Management-ErrorRate-${Environment}
+      AlarmDescription: !Sub Alarm when 4xx and 5xx errors exceed threshold for ${Environment} environment
+      MetricName: 5xxErrorRate
+      Namespace: AWS/CloudFront
+      Dimensions:
+        - Name: DistributionId
+          Value: !Ref CloudFrontDistribution
+        - Name: Region
+          Value: Global
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !If [HasErrorNotificationEmail, !Ref AlarmTopic, !Ref AWS::NoValue]
+
+  # Route 53 DNS Record (if domain is provided)
+  DnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasCustomDomain
+    Properties:
+      HostedZoneName: !Sub ${DomainName}.
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt CloudFrontDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2  # CloudFront hosted zone ID
+        EvaluateTargetHealth: false
+
+  # Budget for Cost Monitoring (production only)
+  Budget:
+    Type: AWS::Budgets::Budget
+    Condition: IsProduction
+    Properties:
+      Budget:
+        BudgetName: !Sub UW-Waste-Management-Monthly-Budget-${Environment}
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: 100
+          Unit: USD
+        CostFilters:
+          TagKeyValue:
+            - Key: Project
+              Value: UW-Waste-Management
+            - Key: Environment
+              Value: !Ref Environment
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - !If
+              - HasErrorNotificationEmail
+              - SubscriptionType: EMAIL
+                Address: !Ref ErrorNotificationEmail
+              - !Ref AWS::NoValue
 
 Outputs:
+  S3BucketName:
+    Description: Name of S3 bucket
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Sub ${AWS::StackName}-S3BucketName
+
+  CloudFrontDistributionId:
+    Description: CloudFront distribution ID
+    Value: !Ref CloudFrontDistribution
+    Export:
+      Name: !Sub ${AWS::StackName}-CloudFrontDistributionId
+
   CloudFrontDomainName:
-    Description: CloudFront Domain Name
+    Description: CloudFront domain name
     Value: !GetAtt CloudFrontDistribution.DomainName
     Export:
-      Name: !Sub '${AWS::StackName}-CloudFrontDomainName'
+      Name: !Sub ${AWS::StackName}-CloudFrontDomainName
 
-  DynamoDBTableName:
-    Description: DynamoDB Table Name
-    Value: !Ref WasteManagementTable
+  CustomDomainName:
+    Description: Custom domain name (if provided)
+    Value: !If [HasCustomDomain, !Ref DomainName, 'Not configured']
     Export:
-      Name: !Sub '${AWS::StackName}-DynamoDBTableName'
+      Name: !Sub ${AWS::StackName}-CustomDomainName
 
-  ApiGatewayUrl:
-    Description: API Gateway URL
-    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+  LoggingBucketName:
+    Description: Name of logging bucket
+    Value: !Ref LoggingBucket
     Export:
-      Name: !Sub '${AWS::StackName}-ApiGatewayUrl'
+      Name: !Sub ${AWS::StackName}-LoggingBucketName
 
-  S3BucketName:
-    Description: S3 Bucket Name for Frontend
-    Value: !Ref FrontendBucket
+  WebACLArn:
+    Condition: CreateWAFResources
+    Description: ARN of WAF Web ACL
+    Value: !GetAtt WebACL.Arn
     Export:
-      Name: !Sub '${AWS::StackName}-S3BucketName'
+      Name: !Sub ${AWS::StackName}-WebACLArn
 
-  LambdaRoleArn:
-    Description: Lambda Execution Role ARN
-    Value: !GetAtt LambdaExecutionRole.Arn
+  AlarmTopicArn:
+    Condition: EnableAlarmResources
+    Description: ARN of SNS topic for alarms
+    Value: !Ref AlarmTopic
     Export:
-      Name: !Sub '${AWS::StackName}-LambdaRoleArn'
+      Name: !Sub ${AWS::StackName}-AlarmTopicArn
