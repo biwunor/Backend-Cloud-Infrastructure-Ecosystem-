@@ -110,7 +110,7 @@ variable "alert_email" {
 variable "database_name" {
   description = "PostgreSQL database name"
   type        = string
-  default     = "africaHelpApp"
+  default     = "uwHelpApp"
 }
 
 variable "database_username" {

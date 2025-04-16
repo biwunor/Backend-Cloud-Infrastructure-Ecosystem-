@@ -60,7 +60,7 @@ type User
   first_name: String
   last_name: String
   role: UserRole!
-  campus: String  # African location/region
+  campus: String  # UW campus location/region
   department: String
   profile_image: String
   sustainability_score: Int

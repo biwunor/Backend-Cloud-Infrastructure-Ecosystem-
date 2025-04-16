@@ -1,5 +1,5 @@
 /**
- * RDS PostgreSQL Module Variables for Africa Help App
+ * RDS PostgreSQL Module Variables for UW Help App
  * 
  * Variables for configuring the PostgreSQL RDS instance.
  * 
@@ -10,7 +10,7 @@
 variable "name_prefix" {
   description = "Prefix for resource names"
   type        = string
-  default     = "africa-help-app"
+  default     = "uw-help-app"
 }
 
 variable "environment" {
@@ -42,7 +42,7 @@ variable "master_username" {
 variable "database_name" {
   description = "Name of the initial database to create"
   type        = string
-  default     = "africaHelpApp"
+  default     = "uwHelpApp"
 }
 
 variable "engine_version" {

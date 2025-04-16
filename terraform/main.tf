@@ -3,7 +3,7 @@ provider "aws" {
   
   default_tags {
     tags = {
-      Project     = "Africa-Help-App"
+      Project     = "UW-Help-App"
       Environment = terraform.workspace
       ManagedBy   = "Terraform"
     }
@@ -13,10 +13,10 @@ provider "aws" {
 # Remote state configuration (uncomment when ready to use)
 terraform {
   backend "s3" {
-    bucket         = "africa-help-app-terraform-state"
+    bucket         = "uw-help-app-terraform-state"
     key            = "terraform.tfstate"
     region         = "us-west-2"
-    dynamodb_table = "africa-help-app-terraform-locks"
+    dynamodb_table = "uw-help-app-terraform-locks"
     encrypt        = true
   }
   
@@ -31,11 +31,11 @@ terraform {
 }
 
 locals {
-  name_prefix = "africa-help-app-${terraform.workspace}"
+  name_prefix = "uw-help-app-${terraform.workspace}"
   environment = terraform.workspace
   
   common_tags = {
-    Project     = "Africa-Help-App"
+    Project     = "UW-Help-App"
     Environment = local.environment
     ManagedBy   = "Terraform"
   }

@@ -1,6 +1,6 @@
 # Contributing to UW Help App
 
-First of all, thank you for considering contributing to the UW Help App! This is a community-driven project that aims to make waste management more efficient across the University of Washington. Your contributions help make this platform better for everyone.
+First of all, thank you for considering contributing to the UW Help App! This is a community-driven project that aims to make waste management more efficient across the Africa Your contributions help make this platform better for everyone.
 
 ## Table of Contents
 

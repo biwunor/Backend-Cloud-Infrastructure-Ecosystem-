@@ -1,5 +1,5 @@
 /**
- * RDS PostgreSQL Module for Africa Help App
+ * RDS PostgreSQL Module for UW Help App
  * 
  * This module creates a PostgreSQL RDS instance with multi-AZ support,
  * appropriate security groups, subnet groups, and parameter groups.
@@ -14,7 +14,7 @@ locals {
     {
       Name        = local.name_prefix
       Environment = var.environment
-      Project     = "Africa-Help-App"
+      Project     = "UW-Help-App"
       ManagedBy   = "Terraform"
     },
     var.tags
@@ -31,7 +31,7 @@ resource "random_password" "master_password" {
 # Store PostgreSQL credentials in Secrets Manager
 resource "aws_secretsmanager_secret" "postgres_credentials" {
   name        = "${local.name_prefix}-credentials-${var.environment}"
-  description = "PostgreSQL credentials for Africa Help App ${var.environment} environment"
+  description = "PostgreSQL credentials for UW Help App ${var.environment} environment"
   tags        = local.tags
 }
 

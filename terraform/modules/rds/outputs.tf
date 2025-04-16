@@ -1,5 +1,5 @@
 /**
- * RDS PostgreSQL Module Outputs for Africa Help App
+ * RDS PostgreSQL Module Outputs for UW Help App
  * 
  * Output values exposed by the RDS module.
  * 
