@@ -1,0 +1,225 @@
+type WasteItem @model
+@auth(rules: [
+  { allow: public, operations: [read] },
+  { allow: groups, groups: ["Administrators"], operations: [create, update, delete, read] },
+  { allow: groups, groups: ["Contributors"], operations: [create, update, read] },
+  { allow: private, operations: [read] }
+]) {
+  id: ID!
+  name: String!
+  description: String
+  category: WasteCategory!
+  disposal_method: DisposalMethod!
+  recyclable: Boolean!
+  compostable: Boolean!
+  hazardous: Boolean!
+  special_handling: String
+  image_url: String
+  weight_per_unit: Float
+  carbon_footprint: Float
+  created_at: AWSDateTime
+  updated_at: AWSDateTime
+  locations: [LocationConnection] @connection(keyName: "byWasteItem", fields: ["id"])
+  disposal_records: [DisposalRecord] @connection(keyName: "byWasteItem", fields: ["id"])
+}
+
+type Location @model
+@auth(rules: [
+  { allow: public, operations: [read] },
+  { allow: groups, groups: ["Administrators"], operations: [create, update, delete, read] },
+  { allow: groups, groups: ["Contributors"], operations: [create, update, read] },
+  { allow: private, operations: [read] }
+]) {
+  id: ID!
+  name: String!
+  description: String
+  address: String
+  city: String
+  state: String
+  zip_code: String
+  latitude: Float
+  longitude: Float
+  type: LocationType!
+  hours_of_operation: String
+  phone_number: String
+  website: String
+  accepted_items: [WasteConnection] @connection(keyName: "byLocation", fields: ["id"])
+  created_at: AWSDateTime
+  updated_at: AWSDateTime
+}
+
+type User 
+@model
+@auth(rules: [
+  { allow: owner, operations: [read, update] },
+  { allow: groups, groups: ["Administrators"], operations: [create, update, delete, read] },
+  { allow: private, operations: [read] }
+]) {
+  id: ID!
+  email: String!
+  first_name: String
+  last_name: String
+  role: UserRole!
+  campus: String  # African location/region
+  department: String
+  profile_image: String
+  sustainability_score: Int
+  badges: [String]
+  created_at: AWSDateTime
+  updated_at: AWSDateTime
+  disposal_records: [DisposalRecord] @connection(keyName: "byUser", fields: ["id"])
+}
+
+type DisposalRecord 
+@model
+@auth(rules: [
+  { allow: owner, operations: [create, read] },
+  { allow: groups, groups: ["Administrators"], operations: [read, delete] },
+  { allow: private, provider: userPools, operations: [] }
+]) {
+  id: ID!
+  user_id: ID!
+  waste_item_id: ID!
+  location_id: ID
+  quantity: Float!
+  unit: String
+  disposal_date: AWSDateTime!
+  notes: String
+  carbon_saving: Float
+  verified: Boolean
+  created_at: AWSDateTime
+  updated_at: AWSDateTime
+  user: User @connection(fields: ["user_id"])
+  waste_item: WasteItem @connection(fields: ["waste_item_id"])
+  location: Location @connection(fields: ["location_id"])
+}
+
+type StatisticsSummary
+@model
+@auth(rules: [
+  { allow: public, operations: [read] },
+  { allow: groups, groups: ["Administrators"], operations: [create, update, delete, read] }
+]) {
+  id: ID!
+  period: StatisticsPeriod!
+  start_date: AWSDateTime!
+  end_date: AWSDateTime!
+  total_waste_items: Int!
+  total_recycled: Float!
+  total_composted: Float!
+  total_landfill: Float!
+  total_hazardous: Float!
+  carbon_saved: Float!
+  trees_saved: Float
+  water_saved: Float
+  created_at: AWSDateTime
+  updated_at: AWSDateTime
+}
+
+type WasteConnection @model(queries: null)
+@auth(rules: [
+  { allow: public, operations: [read] },
+  { allow: groups, groups: ["Administrators"], operations: [create, update, delete, read] }
+]) {
+  id: ID!
+  waste_item_id: ID!
+  location_id: ID!
+  waste_item: WasteItem! @connection(fields: ["waste_item_id"])
+  location: Location! @connection(fields: ["location_id"])
+  created_at: AWSDateTime
+  notes: String
+}
+
+type LocationConnection @model(queries: null)
+@auth(rules: [
+  { allow: public, operations: [read] },
+  { allow: groups, groups: ["Administrators"], operations: [create, update, delete, read] }
+]) {
+  id: ID!
+  waste_item_id: ID!
+  location_id: ID!
+  waste_item: WasteItem! @connection(fields: ["waste_item_id"])
+  location: Location! @connection(fields: ["location_id"])
+  created_at: AWSDateTime
+  notes: String
+}
+
+enum WasteCategory {
+  PAPER
+  PLASTIC
+  GLASS
+  METAL
+  ORGANIC
+  ELECTRONIC
+  HAZARDOUS
+  MIXED
+  OTHER
+}
+
+enum DisposalMethod {
+  RECYCLE
+  COMPOST
+  LANDFILL
+  HAZARDOUS_WASTE
+  SPECIAL_COLLECTION
+  DONATION
+  REUSE
+}
+
+enum LocationType {
+  RECYCLING_CENTER
+  COMPOSTING_FACILITY
+  HAZARDOUS_WASTE_FACILITY
+  LANDFILL
+  DONATION_CENTER
+  COMMUNITY_COLLECTION
+  DROP_OFF_POINT
+  SPECIAL_EVENT
+  RURAL_COLLECTION_POINT
+  URBAN_COLLECTION_CENTER
+  MARKETPLACE
+  VILLAGE_CENTER
+}
+
+enum UserRole {
+  COMMUNITY_MEMBER
+  EDUCATOR
+  STAFF
+  ADMINISTRATOR
+  CONTRIBUTOR
+  VISITOR
+  VOLUNTEER
+  PARTNER
+}
+
+enum StatisticsPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  CUSTOM
+}
+
+type Query {
+  getNearbyLocations(latitude: Float!, longitude: Float!, distance: Float!, type: LocationType): [Location]
+    @function(name: "wasteManagementFunction")
+    
+  getStatisticsForPeriod(period: StatisticsPeriod!, start_date: AWSDateTime, end_date: AWSDateTime): StatisticsSummary
+    @function(name: "wasteManagementFunction")
+    
+  getUserStatistics(user_id: ID!): StatisticsSummary
+    @function(name: "wasteManagementFunction")
+    @auth(rules: [
+      { allow: private, provider: userPools, operations: [read] },
+      { allow: groups, groups: ["Administrators"], operations: [read] }
+    ])
+}
+
+type Mutation {
+  processWasteData: StatisticsSummary
+    @function(name: "wasteManagementFunction")
+    @auth(rules: [
+      { allow: groups, groups: ["Administrators"], operations: [create] }
+    ])
+}

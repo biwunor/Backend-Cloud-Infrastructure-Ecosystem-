@@ -3,7 +3,7 @@ provider "aws" {
   
   default_tags {
     tags = {
-      Project     = "UW-Help-App"
+      Project     = "Africa-Help-App"
       Environment = terraform.workspace
       ManagedBy   = "Terraform"
     }
@@ -13,10 +13,10 @@ provider "aws" {
 # Remote state configuration (uncomment when ready to use)
 terraform {
   backend "s3" {
-    bucket         = "uw-help-app-terraform-state"
+    bucket         = "africa-help-app-terraform-state"
     key            = "terraform.tfstate"
     region         = "us-west-2"
-    dynamodb_table = "uw-help-app-terraform-locks"
+    dynamodb_table = "africa-help-app-terraform-locks"
     encrypt        = true
   }
   
@@ -31,11 +31,11 @@ terraform {
 }
 
 locals {
-  name_prefix = "uw-help-app-${terraform.workspace}"
+  name_prefix = "africa-help-app-${terraform.workspace}"
   environment = terraform.workspace
   
   common_tags = {
-    Project     = "UW-Help-App"
+    Project     = "Africa-Help-App"
     Environment = local.environment
     ManagedBy   = "Terraform"
   }
@@ -61,7 +61,7 @@ module "security" {
   tags         = local.common_tags
 }
 
-# Database Module
+# DynamoDB Module
 module "database" {
   source = "./modules/database"
   
@@ -71,6 +71,40 @@ module "database" {
   read_capacity   = var.dynamodb_read_capacity
   write_capacity  = var.dynamodb_write_capacity
   tags            = local.common_tags
+}
+
+# RDS PostgreSQL Module
+module "rds" {
+  source = "./modules/rds"
+  
+  name_prefix               = local.name_prefix
+  environment               = local.environment
+  vpc_id                    = module.networking.vpc_id
+  subnet_ids                = module.networking.private_subnet_ids
+  allowed_security_group_ids = [module.security.ecs_security_group_id]
+  
+  # Database configuration
+  instance_class            = lookup(var.rds_instance_classes, local.environment, "db.t4g.small")
+  allocated_storage         = lookup(var.rds_allocated_storage, local.environment, 20)
+  max_allocated_storage     = lookup(var.rds_max_allocated_storage, local.environment, 100)
+  database_name             = var.database_name
+  master_username           = var.database_username
+  
+  # High availability settings
+  multi_az                  = local.environment == "prod" || local.environment == "staging"
+  
+  # Backup and maintenance
+  backup_retention_period   = lookup(var.rds_backup_retention_days, local.environment, 7)
+  performance_insights_enabled = local.environment != "dev"
+  performance_insights_retention_period = local.environment == "prod" ? 731 : 7
+  
+  # Monitoring
+  monitoring_interval       = local.environment == "dev" ? 60 : 30
+  alarm_actions             = [aws_sns_topic.alerts.arn]
+  ok_actions                = [aws_sns_topic.alerts.arn]
+  max_connections           = lookup(var.rds_max_connections, local.environment, 100)
+  
+  tags                      = local.common_tags
 }
 
 # ECR Repository
@@ -157,6 +191,7 @@ resource "aws_cloudwatch_dashboard" "main" {
   
   dashboard_body = jsonencode({
     widgets = [
+      # ECS Metrics
       {
         type   = "metric"
         x      = 0
@@ -189,6 +224,8 @@ resource "aws_cloudwatch_dashboard" "main" {
           title  = "ECS Memory Utilization"
         }
       },
+      
+      # ALB Metrics
       {
         type   = "metric"
         x      = 0
@@ -219,6 +256,92 @@ resource "aws_cloudwatch_dashboard" "main" {
           stat   = "Average"
           region = var.aws_region
           title  = "ALB Response Time"
+        }
+      },
+      
+      # RDS Metrics
+      {
+        type   = "metric"
+        x      = 0
+        y      = 12
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", module.rds.db_instance_id]
+          ]
+          period = 300
+          stat   = "Average"
+          region = var.aws_region
+          title  = "RDS CPU Utilization"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 12
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["AWS/RDS", "FreeStorageSpace", "DBInstanceIdentifier", module.rds.db_instance_id]
+          ]
+          period = 300
+          stat   = "Average"
+          region = var.aws_region
+          title  = "RDS Free Storage Space"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 18
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", module.rds.db_instance_id]
+          ]
+          period = 300
+          stat   = "Average"
+          region = var.aws_region
+          title  = "RDS Database Connections"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 18
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["AWS/RDS", "ReadLatency", "DBInstanceIdentifier", module.rds.db_instance_id],
+            ["AWS/RDS", "WriteLatency", "DBInstanceIdentifier", module.rds.db_instance_id]
+          ]
+          period = 300
+          stat   = "Average"
+          region = var.aws_region
+          title  = "RDS Read/Write Latency"
+        }
+      },
+      
+      # DynamoDB Metrics
+      {
+        type   = "metric"
+        x      = 0
+        y      = 24
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${local.name_prefix}-waste-items-table"],
+            ["AWS/DynamoDB", "ConsumedWriteCapacityUnits", "TableName", "${local.name_prefix}-waste-items-table"]
+          ]
+          period = 300
+          stat   = "Sum"
+          region = var.aws_region
+          title  = "DynamoDB Consumed Capacity"
         }
       }
     ]

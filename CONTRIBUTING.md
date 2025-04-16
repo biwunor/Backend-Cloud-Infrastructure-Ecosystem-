@@ -1,6 +1,6 @@
-# Contributing to UW Help App
+# Contributing to Africa Help App
 
-First of all, thank you for considering contributing to the UW Help App! This is a community-driven project that aims to make waste management more efficient at the University of Washington. Your contributions help make this platform better for everyone.
+First of all, thank you for considering contributing to the Africa Help App! This is a community-driven project that aims to make waste management more efficient across Africa. Your contributions help make this platform better for everyone.
 
 ## Table of Contents
 
@@ -31,12 +31,12 @@ This project and everyone participating in it is governed by our [Code of Conduc
 1. Fork the repository on GitHub
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/your-username/uw-help-app.git
-   cd uw-help-app
+   git clone https://github.com/your-username/africa-help-app.git
+   cd africa-help-app
    ```
 3. Add the original repository as an upstream remote:
    ```bash
-   git remote add upstream https://github.com/original-org/uw-help-app.git
+   git remote add upstream https://github.com/original-org/africa-help-app.git
    ```
 4. Install dependencies:
    ```bash
@@ -73,7 +73,7 @@ This project and everyone participating in it is governed by our [Code of Conduc
 This section guides you through submitting a bug report. Following these guidelines helps maintainers and the community understand your report, reproduce the behavior, and find related reports.
 
 **Before Submitting A Bug Report:**
-- Check the [existing issues](https://github.com/your-organization/uw-help-app/issues) to see if the problem has already been reported
+- Check the [existing issues](https://github.com/your-organization/africa-help-app/issues) to see if the problem has already been reported
 - Make sure you're using the latest version of the software
 - Perform a quick search to see if the problem has already been reported
 
@@ -179,7 +179,7 @@ We use ESLint with the Airbnb style guide. Here are some key principles:
 
 ### Project Team Structure
 
-The UW Help App project is led by Bonaventure as the Project Lead, with contributions from the team:
+The Africa Help App project is led by Bonaventure as the Project Lead, with contributions from the team:
 
 - **Core Team**: Responsible for major architectural decisions and project direction
 - **Contributors**: Community members who regularly contribute to the project

@@ -105,3 +105,66 @@ variable "alert_email" {
   type        = string
   default     = ""
 }
+
+# RDS PostgreSQL Variables
+variable "database_name" {
+  description = "PostgreSQL database name"
+  type        = string
+  default     = "africaHelpApp"
+}
+
+variable "database_username" {
+  description = "PostgreSQL master username"
+  type        = string
+  default     = "postgres"
+}
+
+variable "rds_instance_classes" {
+  description = "Map of environment to RDS instance class"
+  type        = map(string)
+  default     = {
+    dev     = "db.t4g.small"
+    staging = "db.t4g.medium"
+    prod    = "db.m6g.large"
+  }
+}
+
+variable "rds_allocated_storage" {
+  description = "Map of environment to allocated storage size in GB"
+  type        = map(number)
+  default     = {
+    dev     = 20
+    staging = 50
+    prod    = 100
+  }
+}
+
+variable "rds_max_allocated_storage" {
+  description = "Map of environment to maximum storage allocation in GB for autoscaling"
+  type        = map(number)
+  default     = {
+    dev     = 100
+    staging = 200
+    prod    = 500
+  }
+}
+
+variable "rds_backup_retention_days" {
+  description = "Map of environment to backup retention period in days"
+  type        = map(number)
+  default     = {
+    dev     = 1
+    staging = 3
+    prod    = 7
+  }
+}
+
+variable "rds_max_connections" {
+  description = "Map of environment to maximum number of database connections"
+  type        = map(number)
+  default     = {
+    dev     = 100
+    staging = 200
+    prod    = 500
+  }
+}

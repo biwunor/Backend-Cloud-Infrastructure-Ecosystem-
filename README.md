@@ -1,8 +1,8 @@
-# UW Help App - Waste Management Platform
+# Africa Help App - Waste Management Platform
 
-![UW Help App Logo](generated-icon.png)
+![Africa Help App Logo](generated-icon.png)
 
-> A comprehensive waste management platform designed to empower the University of Washington community through digital sustainability solutions.
+> A comprehensive waste management platform designed to empower the Africa community through digital sustainability solutions.
 
 **Version:** 1.0.0  
 **Date:** April 16, 2025  
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The UW Help App is a cutting-edge waste management platform developed to streamline and enhance sustainability efforts at the University of Washington. This platform leverages modern cloud technology, containerized architecture, and location-based services to provide an intuitive and efficient waste disposal and tracking system for the university community.
+The Africa Help App is a cutting-edge waste management platform developed to streamline and enhance sustainability efforts across Africa. This platform leverages modern cloud technology, containerized architecture, and location-based services to provide an intuitive and efficient waste disposal and tracking system for the African community.
 
 ## Key Features
 
@@ -57,11 +57,15 @@ The UW Help App is a cutting-edge waste management platform developed to streaml
 
 ### DevOps & Infrastructure
 - AWS ECS containerized deployment
-- Terraform infrastructure as code
+- AWS Amplify for frontend hosting and authentication
+- AWS RDS PostgreSQL for relational data storage
+- VPC with public and private subnets for secure networking
+- Terraform infrastructure as code (IaC)
 - GitHub Actions CI/CD pipeline
 - AWS CloudFront content delivery network
 - Route 53 DNS management with custom domain
 - CloudWatch monitoring and alerting
+- Secrets Manager for secure credential management
 
 ## Architecture
 
@@ -70,17 +74,26 @@ The platform follows a modern cloud-native architecture with microservices runni
 ```
 ┌─────────────────┐     ┌───────────────┐     ┌────────────────┐
 │                 │     │               │     │                │
-│  React Frontend │────▶│ API Gateway   │────▶│  ECS Services  │
-│                 │     │               │     │                │
-└─────────────────┘     └───────────────┘     └────────┬───────┘
-                                                       │
-                                                       ▼
-┌─────────────────┐     ┌───────────────┐     ┌────────────────┐
-│                 │     │               │     │                │
-│   CloudFront    │◀────│   Route 53    │     │    DynamoDB    │
+│  React Frontend │────▶│ API Gateway   │────▶│  ECS Services  │────┐
+│                 │     │               │     │                │    │
+└────────┬────────┘     └───────────────┘     └────────┬───────┘    │
+         │                                             │            │
+         │                                             ▼            ▼
+┌────────▼────────┐     ┌───────────────┐     ┌────────────────┐   ┌────────────────┐
+│                 │     │               │     │                │   │                │
+│   AWS Amplify   │     │   Route 53    │     │    DynamoDB    │   │  PostgreSQL    │
+│                 │     │               │     │    (NoSQL)     │   │     (RDS)      │
+└────────┬────────┘     └───────┬───────┘     └────────────────┘   └────────────────┘
+         │                      │                                          ▲
+         ▼                      ▼                                          │
+┌─────────────────┐     ┌───────────────┐     ┌────────────────┐          │
+│                 │     │               │     │                │          │
+│   CloudFront    │◀────│ Custom Domain │     │  Lambda Funcs  │──────────┘
 │                 │     │               │     │                │
 └─────────────────┘     └───────────────┘     └────────────────┘
 ```
+
+All components run in a secure VPC with public and private subnets, managed through Terraform.
 
 ## Getting Started
 
@@ -96,8 +109,8 @@ The platform follows a modern cloud-native architecture with microservices runni
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-organization/uw-help-app.git
-   cd uw-help-app
+   git clone https://github.com/your-organization/africa-help-app.git
+   cd africa-help-app
    ```
 
 2. Install dependencies:
@@ -156,8 +169,16 @@ For detailed deployment instructions, please refer to the [Deployment Guide](DEP
 ## Project Structure
 
 ```
-uw-help-app/
+africa-help-app/
 ├── .github/                   # GitHub Actions workflows and templates
+├── amplify/                   # AWS Amplify configuration
+│   ├── backend/               # Amplify backend resources
+│   │   ├── api/               # AppSync GraphQL API definition
+│   │   ├── auth/              # Cognito authentication resources
+│   │   ├── function/          # Lambda functions
+│   │   └── storage/           # S3 and DynamoDB resources
+│   ├── .config/               # Amplify configuration files
+│   └── team-provider-info.json# Environment-specific settings
 ├── backend/                   # Backend API and services
 │   ├── api/                   # API routes and controllers
 │   ├── config/                # Configuration files
@@ -176,10 +197,12 @@ uw-help-app/
 │   │   ├── dns_cdn/           # Route 53 and CloudFront
 │   │   ├── ecs/               # ECS container orchestration
 │   │   ├── networking/        # VPC, subnets, gateways
+│   │   ├── rds/               # PostgreSQL RDS configuration
 │   │   └── security/          # IAM, security groups
 │   ├── main.tf                # Main Terraform configuration
 │   └── variables.tf           # Terraform variables
-└── docs/                      # Documentation
+├── docs/                      # Documentation
+└── amplify.yml                # Amplify build specification
 ```
 
 ## Team
@@ -192,7 +215,7 @@ uw-help-app/
 
 ## Contributing
 
-We welcome contributions from the University of Washington community. Please review our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
+We welcome contributions from the Africa community. Please review our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
 
 ### Development Workflow
 
@@ -208,9 +231,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- University of Washington Sustainability Office
-- UW Information Technology Services
-- UW Facilities Services
+- Africa Sustainability Office
+- Africa Information Technology Services
+- Africa Facilities Services
 - The open-source community for providing valuable tools and libraries
 
 ## Contact
@@ -221,5 +244,5 @@ For questions, support, or feedback, please contact:
 Project Lead  
 Email: proynsmd@example.com  
 
-University of Washington  
-Seattle, WA 98195
+Africa  
+Nairobi, Kenya

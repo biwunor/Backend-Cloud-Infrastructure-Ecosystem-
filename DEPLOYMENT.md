@@ -1,21 +1,47 @@
-# Deployment Guide
+# Comprehensive AWS Deployment Guide
 
-This document provides instructions for deploying the UW Help App to AWS using the advanced build, deployment, and hosting solution with custom domain name integration.
+This document provides detailed instructions for deploying the UW Help App using a comprehensive AWS architecture with Amplify, ECS, RDS, and a robust networking infrastructure.
+
+**Version:** 2.0.0  
+**Last Updated:** April 16, 2025  
+**Author:** Bonaventure  
+**Project ID:** PROYNSMD
 
 ## Architecture Overview
 
-The application is deployed using a modern cloud-native architecture:
+The application is deployed using a modern cloud-native architecture with multiple AWS services integrated to provide a scalable, secure, and maintainable platform:
 
+### Core Infrastructure
+- **VPC & Networking**: Custom VPC with public and private subnets across multiple availability zones
 - **Frontend/Backend**: Containerized Node.js application
 - **Container Orchestration**: AWS ECS Fargate
-- **Database**: AWS DynamoDB
-- **CDN**: AWS CloudFront
-- **DNS Management**: AWS Route 53
-- **SSL Certificates**: AWS Certificate Manager
-- **Infrastructure as Code**: Terraform
-- **CI/CD Pipeline**: GitHub Actions
+- **Databases**: 
+  - AWS DynamoDB for NoSQL data
+  - AWS RDS PostgreSQL for relational data
+- **Static Content**: AWS S3 buckets with restricted access
+- **Authentication**: AWS Cognito via AWS Amplify
+- **CDN**: AWS CloudFront with global edge locations
+- **DNS Management**: AWS Route 53 with custom domain
+- **SSL/TLS**: AWS Certificate Manager for secure HTTPS
+- **Infrastructure as Code**: Terraform for consistent deployments
+- **CI/CD Pipeline**: GitHub Actions for automated builds and deployments
+- **Monitoring**: CloudWatch with custom dashboards and alerts
+- **Secrets Management**: AWS Secrets Manager for sensitive credentials
 
-![Architecture Diagram](https://excalidraw.com/--placeholder--for-architecture-diagram)
+### AWS Amplify Components
+- **Web Hosting**: Scalable frontend hosting with built-in CI/CD
+- **Authentication**: Cognito user pools with identity federation
+- **GraphQL API**: AppSync API with schema-first development
+- **Storage**: S3 buckets for user content and media
+- **Functions**: Lambda functions for serverless processing
+
+### Database Strategy
+- **DynamoDB**: For high-throughput, low-latency access patterns
+- **PostgreSQL RDS**: For complex queries and relational data
+- **Multi-AZ**: High availability with automatic failover
+- **Automated Backups**: Point-in-time recovery capability
+
+![Architecture Diagram](architecture-diagram.png)
 
 ## Prerequisites
 
@@ -192,10 +218,186 @@ To delete all resources:
    - Verify health check endpoint is correctly implemented and responding
    - Check SSL certificate is valid and correctly attached
 
-## Support
+## AWS Amplify Deployment
+
+AWS Amplify provides a simplified way to deploy and manage the frontend application with built-in CI/CD, authentication, and backend services.
+
+### Initial Amplify Setup
+
+1. Install the Amplify CLI:
+   ```bash
+   npm install -g @aws-amplify/cli
+   ```
+
+2. Configure Amplify with your AWS account:
+   ```bash
+   amplify configure
+   ```
+
+3. Initialize Amplify in your project:
+   ```bash
+   amplify init
+   ```
+   - Follow the prompts to configure your project
+
+### Adding Authentication
+
+1. Add authentication to your Amplify project:
+   ```bash
+   amplify add auth
+   ```
+   - Configure authentication settings as needed
+   - Select social providers if required (Google, Facebook, etc.)
+
+2. Push the changes to the cloud:
+   ```bash
+   amplify push
+   ```
+
+### Configuring GraphQL API
+
+1. Add the API to your Amplify project:
+   ```bash
+   amplify add api
+   ```
+   - Select GraphQL as the API type
+   - Choose Amazon Cognito User Pool for authentication
+   - Select additional auth types if needed
+
+2. Edit the GraphQL schema in `amplify/backend/api/uwHelpAppApi/schema.graphql`
+
+3. Generate the API code and push changes:
+   ```bash
+   amplify push
+   ```
+
+### Deploying with Amplify Console
+
+1. Connect your repository to Amplify Console:
+   - Go to AWS Amplify Console
+   - Click "Connect app"
+   - Select your GitHub repository
+   - Follow the setup wizard
+
+2. Configure build settings:
+   - The `amplify.yml` file in the repository root defines the build process
+   - Customize environment variables and build commands as needed
+
+3. Configure branch-based deployments:
+   - Main branch: Production environment
+   - Develop branch: Development environment
+
+4. Trigger a deployment:
+   - Commit and push to your connected repository
+   - Amplify automatically builds and deploys the application
+
+## PostgreSQL RDS Setup
+
+The application uses PostgreSQL RDS for relational data storage with the following configuration:
+
+### RDS Configuration
+
+1. **Instance Configuration**:
+   - Engine: PostgreSQL 13.7
+   - Instance Class: db.t4g.small (dev), db.t4g.medium (staging), db.m6g.large (prod)
+   - Storage: gp3 SSD with automatic scaling
+   - Multi-AZ: Enabled for staging and production environments
+
+2. **Security Configuration**:
+   - VPC: Deployed in private subnets
+   - Security Group: Access restricted to application ECS tasks
+   - Encryption: Storage and connections encrypted
+   - Password: Generated securely and stored in AWS Secrets Manager
+
+3. **Monitoring**:
+   - Enhanced Monitoring: 60-second intervals
+   - Performance Insights: Enabled for production
+   - CloudWatch Alarms: CPU, memory, storage, and connection count thresholds
+
+### Database Migration Strategy
+
+1. **Initial Schema Setup**:
+   - Bootstrap schema is created during the first deployment
+   - Base tables and indexes are defined in Terraform
+
+2. **Schema Migrations**:
+   - Use migrations table to track applied migrations
+   - Migrations are applied during application startup
+   - Migration scripts are version-controlled in the repository
+
+3. **Backup Strategy**:
+   - Automated daily backups with 7-day retention (production)
+   - Point-in-time recovery enabled
+   - Manual snapshots before major changes
+
+## VPC and Networking
+
+The application is deployed within a custom VPC with the following architecture:
+
+### VPC Design
+
+1. **CIDR Block**: 10.0.0.0/16
+
+2. **Subnets**:
+   - Public Subnets: 10.0.1.0/24, 10.0.2.0/24, 10.0.3.0/24
+   - Private Application Subnets: 10.0.11.0/24, 10.0.12.0/24, 10.0.13.0/24
+   - Private Database Subnets: 10.0.21.0/24, 10.0.22.0/24, 10.0.23.0/24
+
+3. **Availability Zones**:
+   - Distributed across three AZs for high availability
+   - us-west-2a, us-west-2b, us-west-2c (default)
+
+4. **Internet Connectivity**:
+   - Internet Gateway for public subnets
+   - NAT Gateways in each public subnet for private subnet internet access
+
+5. **Security Groups**:
+   - ALB Security Group: HTTP/HTTPS from anywhere
+   - ECS Security Group: Traffic from ALB only
+   - RDS Security Group: Database port from ECS security group only
+   - Redis Security Group (if used): Redis port from ECS security group only
+
+### Network Flow
+
+1. **External Traffic**:
+   - User → CloudFront → Application Load Balancer (in public subnets) → ECS Services (in private subnets)
+
+2. **Database Access**:
+   - ECS Services (in private subnets) → RDS (in private database subnets)
+
+3. **Internet Access from Private Subnets**:
+   - ECS Services → NAT Gateway → Internet Gateway → Internet
+
+## Support and Operations
+
+For ongoing operational support with the AWS deployment:
+
+### Monitoring and Alerts
+
+1. Set up CloudWatch alerts for:
+   - CPU and memory utilization beyond thresholds
+   - Error rates exceeding normal levels
+   - Database connection issues
+   - ECS service health check failures
+
+2. Configure alert notifications:
+   - Email notifications via SNS
+   - Slack integration for real-time alerts
+
+### Operations Documentation
+
+1. Keep runtime operation documentation in the `docs/operations` directory:
+   - Runbooks for common issues
+   - High-level troubleshooting guide
+   - Database maintenance procedures
+
+### Support Contacts
 
 For additional support with deployment issues:
 
-- Check the AWS service status page
+- Check the AWS service status page: https://status.aws.amazon.com/
 - Review CloudWatch logs for detailed error messages
-- Contact the DevOps team at [devops@example.com](mailto:devops@example.com)
+- Contact the DevOps team:
+  - Email: devops@example.com
+  - Slack: #uw-help-app-support
+  - Emergency: +1 (555) 123-4567
