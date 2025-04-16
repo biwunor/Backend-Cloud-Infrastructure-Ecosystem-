@@ -3,11 +3,11 @@
 **Version:** 1.0.0  
 **Last Updated:** April 16, 2025  
 **Author:** Bonaventure  
-**Project:** Africa Help App - Waste Management Platform
+**Project:** UW Help App - Waste Management Platform
 
 ## Overview
 
-This document provides detailed information about the PostgreSQL RDS implementation for the Africa Help App. It covers the database architecture, configuration, security measures, backup strategies, and maintenance procedures.
+This document provides detailed information about the PostgreSQL RDS implementation for the UW Help App. It covers the database architecture, configuration, security measures, backup strategies, and maintenance procedures.
 
 ## Database Architecture
 
@@ -230,7 +230,7 @@ The PostgreSQL RDS instance is deployed using the Terraform RDS module in the `t
 
 ## Conclusion
 
-This RDS PostgreSQL implementation provides a secure, scalable, and maintainable relational database for the Africa Help App. The multi-environment approach allows for appropriate resource allocation based on requirements, while ensuring consistent configuration across all environments.
+This RDS PostgreSQL implementation provides a secure, scalable, and maintainable relational database for the UW Help App. The multi-environment approach allows for appropriate resource allocation based on requirements, while ensuring consistent configuration across all environments.
 
 ---
 

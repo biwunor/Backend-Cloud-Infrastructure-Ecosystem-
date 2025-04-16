@@ -43,7 +43,7 @@ async function main() {
         // Create repository if it doesn't exist
         const { data: newRepo } = await octokit.repos.createForAuthenticatedUser({
           name: repo,
-          description: 'A dynamic digital sustainability platform tailored for Africa, transforming environmental responsibility into an engaging, technology-driven experience.',
+          description: 'A dynamic digital sustainability platform tailored for the University of Washington, transforming environmental responsibility into an engaging, technology-driven experience.',
           private: false
         });
         console.log(`Repository created: ${newRepo.html_url}`);
@@ -117,7 +117,7 @@ async function buildOnly() {
     const { execSync } = require('child_process');
     
     // Create temporary directory for build
-    const buildDir = path.join('/tmp', 'africa-help-app-build');
+    const buildDir = path.join('/tmp', 'uw-help-app-build');
     if (fs.existsSync(buildDir)) {
       execSync(`rm -rf ${buildDir}`);
     }
@@ -129,7 +129,7 @@ async function buildOnly() {
     
     // Create zip archive
     console.log('Creating zip archive...');
-    const zipPath = path.join('/tmp', 'africa-help-app.zip');
+    const zipPath = path.join('/tmp', 'uw-help-app.zip');
     execSync(`cd ${buildDir} && zip -r ${zipPath} .`);
     
     console.log(`\nBuild completed successfully!`);

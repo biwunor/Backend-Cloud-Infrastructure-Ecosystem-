@@ -3,11 +3,11 @@
 **Version:** 1.0.0  
 **Last Updated:** April 16, 2025  
 **Author:** Bonaventure  
-**Project:** Africa Help App - Waste Management Platform
+**Project:** UW Help App - Waste Management Platform
 
 ## Overview
 
-This document provides comprehensive details about the AWS Amplify implementation for the Africa Help App. It covers the setup, configuration, features, and integration aspects of using AWS Amplify within our project architecture.
+This document provides comprehensive details about the AWS Amplify implementation for the UW Help App. It covers the setup, configuration, features, and integration aspects of using AWS Amplify within our project architecture.
 
 ## Amplify Architecture
 
@@ -66,13 +66,13 @@ Our authentication is configured with the following settings:
 ```json
 {
   "auth": {
-    "africaHelpApp": {
+    "uwHelpApp": {
       "service": "Cognito",
       "providerPlugin": "awscloudformation",
       "dependsOn": [],
       "customAuth": false,
       "userPoolConfig": {
-        "userPoolName": "africaHelpAppUserPool",
+        "userPoolName": "uwHelpAppUserPool",
         "mfa": "OPTIONAL",
         "mfaTypes": ["SMS", "TOTP"],
         "passwordPolicy": {
@@ -84,7 +84,7 @@ Our authentication is configured with the following settings:
         },
         "signupAttributes": ["EMAIL", "NAME"],
         "requiredAttributes": ["EMAIL", "NAME"],
-        "userpoolClientName": "africaHelpAppClient",
+        "userpoolClientName": "uwHelpAppClient",
         "userpoolClientGenerateSecret": false
       }
     }
@@ -370,7 +370,7 @@ Monthly cost estimates for different environments:
 
 ## Conclusion
 
-AWS Amplify provides a comprehensive platform for developing and deploying the Africa Help App with minimal infrastructure management. The integration of authentication, API, storage, and hosting services creates a cohesive development experience while maintaining flexibility for future expansion.
+AWS Amplify provides a comprehensive platform for developing and deploying the UW Help App with minimal infrastructure management. The integration of authentication, API, storage, and hosting services creates a cohesive development experience while maintaining flexibility for future expansion.
 
 ---
 

@@ -1,8 +1,8 @@
-# Africa Help App - Waste Management Platform
+# UW Help App - Waste Management Platform
 
-![Africa Help App Logo](generated-icon.png)
+![UW Help App Logo](generated-icon.png)
 
-> A comprehensive waste management platform designed to empower the Africa community through digital sustainability solutions.
+> A comprehensive waste management platform designed to empower the UW community through digital sustainability solutions.
 
 **Version:** 1.0.0  
 **Date:** April 16, 2025  
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The Africa Help App is a cutting-edge waste management platform developed to streamline and enhance sustainability efforts across Africa. This platform leverages modern cloud technology, containerized architecture, and location-based services to provide an intuitive and efficient waste disposal and tracking system for the African community.
+The UW Help App is a cutting-edge waste management platform developed to streamline and enhance sustainability efforts across the University of Washington. This platform leverages modern cloud technology, containerized architecture, and location-based services to provide an intuitive and efficient waste disposal and tracking system for the UW community.
 
 ## Key Features
 
@@ -109,8 +109,8 @@ All components run in a secure VPC with public and private subnets, managed thro
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-organization/africa-help-app.git
-   cd africa-help-app
+   git clone https://github.com/your-organization/uw-help-app.git
+   cd uw-help-app
    ```
 
 2. Install dependencies:
@@ -169,7 +169,7 @@ For detailed deployment instructions, please refer to the [Deployment Guide](DEP
 ## Project Structure
 
 ```
-africa-help-app/
+uw-help-app/
 ├── .github/                   # GitHub Actions workflows and templates
 ├── amplify/                   # AWS Amplify configuration
 │   ├── backend/               # Amplify backend resources
@@ -215,7 +215,7 @@ africa-help-app/
 
 ## Contributing
 
-We welcome contributions from the Africa community. Please review our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
+We welcome contributions from the University of Washington community. Please review our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
 
 ### Development Workflow
 
@@ -231,9 +231,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- Africa Sustainability Office
-- Africa Information Technology Services
-- Africa Facilities Services
+- UW Sustainability Office
+- UW Information Technology Services
+- UW Facilities Services
 - The open-source community for providing valuable tools and libraries
 
 ## Contact
@@ -244,5 +244,5 @@ For questions, support, or feedback, please contact:
 Project Lead  
 Email: proynsmd@example.com  
 
-Africa  
-Nairobi, Kenya
+University of Washington  
+Seattle, WA, USA
