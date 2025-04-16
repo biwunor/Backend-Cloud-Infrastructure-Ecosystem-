@@ -1,238 +1,173 @@
-// Deployment utility script
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const readline = require('readline');
+import { Octokit } from '@octokit/rest';
+import dotenv from 'dotenv';
+import { createRequire } from 'module';
+import process from 'process';
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
+dotenv.config();
 
-// ANSI color codes for prettier output
-const colors = {
-  reset: '\x1b[0m',
-  bright: '\x1b[1m',
-  dim: '\x1b[2m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  cyan: '\x1b[36m'
-};
+// GitHub configuration
+const owner = 'biwunor';
+const repo = 'Backend-Cloud-Infrastructure-Ecosystem-';
 
-// Print colored header
-console.log(`${colors.bright}${colors.cyan}========================================${colors.reset}`);
-console.log(`${colors.bright}${colors.cyan}   UW Help App Deployment Utility      ${colors.reset}`);
-console.log(`${colors.bright}${colors.cyan}========================================${colors.reset}`);
-console.log();
+// For importing CommonJS modules
+const require = createRequire(import.meta.url);
 
-// Main menu function
+async function main() {
+  console.log('Starting GitHub deployment process...');
+  
+  // Create Octokit instance with the provided token
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    console.error('Error: GitHub token not found in environment variables.');
+    console.log('Please set the GITHUB_TOKEN environment variable.');
+    process.exit(1);
+  }
+  
+  const octokit = new Octokit({
+    auth: token
+  });
+
+  try {
+    console.log(`Connecting to GitHub repository: ${owner}/${repo}`);
+    
+    // Check if repository exists
+    try {
+      const { data: repository } = await octokit.repos.get({
+        owner,
+        repo
+      });
+      console.log(`Repository found: ${repository.html_url}`);
+    } catch (error) {
+      if (error.status === 404) {
+        console.log('Repository not found. Creating a new repository...');
+        // Create repository if it doesn't exist
+        const { data: newRepo } = await octokit.repos.createForAuthenticatedUser({
+          name: repo,
+          description: 'A dynamic digital sustainability platform tailored for Africa, transforming environmental responsibility into an engaging, technology-driven experience.',
+          private: false
+        });
+        console.log(`Repository created: ${newRepo.html_url}`);
+      } else {
+        throw error;
+      }
+    }
+
+    // Define the files we want to commit and push
+    console.log('Preparing files for deployment...');
+    
+    // Show a menu of deployment options
+    showMainMenu();
+    
+  } catch (error) {
+    console.error('Error during GitHub deployment:', error.message);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+    }
+    process.exit(1);
+  }
+}
+
 function showMainMenu() {
-  console.log(`${colors.bright}Select a deployment target:${colors.reset}`);
-  console.log(`${colors.green}1. GitHub Pages${colors.reset}`);
-  console.log(`${colors.blue}2. AWS S3 + CloudFront${colors.reset}`);
-  console.log(`${colors.yellow}3. Netlify${colors.reset}`);
-  console.log(`${colors.dim}4. Build Only (No Deployment)${colors.reset}`);
-  console.log(`${colors.red}5. Exit${colors.reset}`);
-  console.log();
-  
-  rl.question(`${colors.bright}Enter your choice (1-5): ${colors.reset}`, (answer) => {
-    switch(answer.trim()) {
-      case '1':
-        deployToGitHubPages();
-        break;
-      case '2':
-        deployToAWS();
-        break;
-      case '3':
-        deployToNetlify();
-        break;
-      case '4':
-        buildOnly();
-        break;
-      case '5':
-        console.log(`${colors.yellow}Exiting deployment utility.${colors.reset}`);
-        rl.close();
-        break;
-      default:
-        console.log(`${colors.red}Invalid option. Please try again.${colors.reset}`);
-        showMainMenu();
-    }
-  });
+  console.log('\n----- GitHub Deployment Menu -----');
+  console.log('1. Deploy to GitHub Pages');
+  console.log('2. Deploy to AWS');
+  console.log('3. Deploy to Netlify');
+  console.log('4. Build project only');
+  console.log('5. Exit');
+  console.log('----------------------------------');
+  console.log('Please select an option by running:');
+  console.log('node deploy.js [option]');
+  console.log('Example: node deploy.js 1');
 }
 
-// Build the project
-function buildProject() {
-  console.log(`${colors.yellow}Building project...${colors.reset}`);
+async function deployToGitHubPages() {
+  console.log('Starting GitHub Pages deployment...');
   try {
-    execSync('npm run build', { stdio: 'inherit' });
-    console.log(`${colors.green}Build completed successfully!${colors.reset}`);
-    return true;
-  } catch (error) {
-    console.error(`${colors.red}Build failed:${colors.reset}`, error.message);
-    return false;
-  }
-}
-
-// Deploy to GitHub Pages
-function deployToGitHubPages() {
-  console.log(`${colors.green}Preparing for GitHub Pages deployment...${colors.reset}`);
-  
-  // Check if gh-pages package is installed
-  try {
-    execSync('npm list gh-pages', { stdio: 'pipe' });
-  } catch (error) {
-    console.log(`${colors.yellow}Installing gh-pages package...${colors.reset}`);
-    execSync('npm install --save-dev gh-pages', { stdio: 'inherit' });
-  }
-  
-  // Check for repository configuration
-  let packageJson;
-  try {
-    packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    if (!packageJson.homepage) {
-      rl.question(`${colors.yellow}Enter your GitHub Pages URL (e.g., https://username.github.io/repo-name/): ${colors.reset}`, (homepage) => {
-        packageJson.homepage = homepage.trim();
-        fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2));
-        console.log(`${colors.green}Updated package.json with homepage: ${packageJson.homepage}${colors.reset}`);
-        continueWithGitHubDeployment();
-      });
-    } else {
-      continueWithGitHubDeployment();
-    }
-  } catch (error) {
-    console.error(`${colors.red}Error reading package.json:${colors.reset}`, error.message);
-    returnToMainMenu();
-  }
-}
-
-function continueWithGitHubDeployment() {
-  if (buildProject()) {
-    console.log(`${colors.green}Deploying to GitHub Pages...${colors.reset}`);
-    try {
-      execSync('npm run deploy', { stdio: 'inherit' });
-      console.log(`${colors.green}Deployment to GitHub Pages completed successfully!${colors.reset}`);
-    } catch (error) {
-      console.error(`${colors.red}Deployment failed:${colors.reset}`, error.message);
-    }
-  }
-  returnToMainMenu();
-}
-
-// Deploy to AWS
-function deployToAWS() {
-  console.log(`${colors.blue}Preparing for AWS deployment...${colors.reset}`);
-  
-  // Check for AWS CLI
-  try {
-    execSync('aws --version', { stdio: 'pipe' });
-  } catch (error) {
-    console.log(`${colors.red}AWS CLI is not installed or not in PATH.${colors.reset}`);
-    console.log(`${colors.yellow}Please install AWS CLI: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html${colors.reset}`);
-    returnToMainMenu();
-    return;
-  }
-  
-  // Get AWS configuration
-  rl.question(`${colors.blue}Enter your S3 bucket name: ${colors.reset}`, (bucketName) => {
-    rl.question(`${colors.blue}Enter your CloudFront distribution ID (optional): ${colors.reset}`, (distributionId) => {
-      if (buildProject()) {
-        console.log(`${colors.blue}Deploying to S3 bucket: ${bucketName}${colors.reset}`);
-        try {
-          execSync(`aws s3 sync dist/ s3://${bucketName} --delete`, { stdio: 'inherit' });
-          console.log(`${colors.green}S3 deployment completed successfully!${colors.reset}`);
-          
-          if (distributionId) {
-            console.log(`${colors.blue}Creating CloudFront invalidation...${colors.reset}`);
-            execSync(`aws cloudfront create-invalidation --distribution-id ${distributionId} --paths "/*"`, { stdio: 'inherit' });
-            console.log(`${colors.green}CloudFront invalidation created successfully!${colors.reset}`);
-          }
-        } catch (error) {
-          console.error(`${colors.red}AWS deployment failed:${colors.reset}`, error.message);
-        }
+    const ghpages = require('gh-pages');
+    
+    ghpages.publish('.', {
+      branch: 'gh-pages',
+      message: 'Auto-generated commit from deployment script',
+      repo: `https://${process.env.GITHUB_TOKEN}@github.com/${owner}/${repo}.git`,
+      user: {
+        name: 'Bonaventure',
+        email: 'biwunor@example.com'
       }
-      returnToMainMenu();
+    }, function(err) {
+      if (err) {
+        console.error('Error during GitHub Pages deployment:', err);
+        process.exit(1);
+      } else {
+        console.log('Successfully deployed to GitHub Pages!');
+        console.log(`Visit: https://${owner}.github.io/${repo}/`);
+      }
     });
-  });
-}
-
-// Deploy to Netlify
-function deployToNetlify() {
-  console.log(`${colors.yellow}Preparing for Netlify deployment...${colors.reset}`);
-  
-  // Check for Netlify CLI
-  try {
-    execSync('netlify --version', { stdio: 'pipe' });
   } catch (error) {
-    console.log(`${colors.yellow}Installing Netlify CLI...${colors.reset}`);
-    try {
-      execSync('npm install netlify-cli -g', { stdio: 'inherit' });
-    } catch (cliError) {
-      console.log(`${colors.red}Could not install Netlify CLI. Try running:${colors.reset} npm install netlify-cli -g`);
-      returnToMainMenu();
-      return;
-    }
-  }
-  
-  if (buildProject()) {
-    console.log(`${colors.yellow}Deploying to Netlify...${colors.reset}`);
-    try {
-      // Check if user is logged in to Netlify
-      execSync('netlify status', { stdio: 'pipe' });
-      
-      // Ask if they want to create a new site or deploy to existing
-      rl.question(`${colors.yellow}Deploy to a new Netlify site? (y/n): ${colors.reset}`, (answer) => {
-        const createNewSite = answer.toLowerCase() === 'y';
-        
-        try {
-          if (createNewSite) {
-            execSync('netlify sites:create', { stdio: 'inherit' });
-          }
-          
-          execSync('netlify deploy --dir=dist --prod', { stdio: 'inherit' });
-          console.log(`${colors.green}Netlify deployment completed successfully!${colors.reset}`);
-        } catch (deployError) {
-          console.error(`${colors.red}Netlify deployment failed:${colors.reset}`, deployError.message);
-        }
-        
-        returnToMainMenu();
-      });
-    } catch (error) {
-      console.log(`${colors.yellow}You need to log in to Netlify first.${colors.reset}`);
-      try {
-        execSync('netlify login', { stdio: 'inherit' });
-        deployToNetlify();
-      } catch (loginError) {
-        console.error(`${colors.red}Netlify login failed:${colors.reset}`, loginError.message);
-        returnToMainMenu();
-      }
-    }
-  } else {
-    returnToMainMenu();
+    console.error('Error loading gh-pages module:', error);
+    process.exit(1);
   }
 }
 
-// Build only
-function buildOnly() {
-  buildProject();
-  returnToMainMenu();
+async function buildOnly() {
+  console.log('Building project for manual deployment...');
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { execSync } = require('child_process');
+    
+    // Create temporary directory for build
+    const buildDir = path.join('/tmp', 'africa-help-app-build');
+    if (fs.existsSync(buildDir)) {
+      execSync(`rm -rf ${buildDir}`);
+    }
+    fs.mkdirSync(buildDir, { recursive: true });
+    
+    // Copy all files to build directory
+    console.log('Copying project files...');
+    execSync(`cp -r . ${buildDir}`);
+    
+    // Create zip archive
+    console.log('Creating zip archive...');
+    const zipPath = path.join('/tmp', 'africa-help-app.zip');
+    execSync(`cd ${buildDir} && zip -r ${zipPath} .`);
+    
+    console.log(`\nBuild completed successfully!`);
+    console.log(`Zip archive created at: ${zipPath}`);
+    console.log(`Size: ${(fs.statSync(zipPath).size / (1024 * 1024)).toFixed(2)} MB`);
+    console.log('\nYou can download this file and manually upload it to your repository.');
+    
+  } catch (error) {
+    console.error('Error during build process:', error);
+    process.exit(1);
+  }
 }
 
-// Return to main menu
-function returnToMainMenu() {
-  console.log();
-  console.log(`${colors.bright}${colors.cyan}----------------------------------------${colors.reset}`);
-  showMainMenu();
+// Process command line arguments
+const option = process.argv[2];
+if (option) {
+  switch (option) {
+    case '1':
+      deployToGitHubPages();
+      break;
+    case '2':
+      console.log('AWS deployment option selected. Feature coming soon.');
+      break;
+    case '3':
+      console.log('Netlify deployment option selected. Feature coming soon.');
+      break;
+    case '4':
+      buildOnly();
+      break;
+    case '5':
+      console.log('Exiting deployment tool.');
+      process.exit(0);
+      break;
+    default:
+      console.log('Invalid option selected.');
+      showMainMenu();
+      break;
+  }
+} else {
+  main().catch(console.error);
 }
-
-// Start the utility
-showMainMenu();
-
-// Handle exit
-rl.on('close', () => {
-  console.log(`${colors.bright}${colors.cyan}========================================${colors.reset}`);
-  console.log(`${colors.bright}${colors.cyan}   Thank you for using the deployment utility!${colors.reset}`);
-  console.log(`${colors.bright}${colors.cyan}========================================${colors.reset}`);
-  process.exit(0);
-});
