@@ -1,6 +1,6 @@
 {
   "auth": {
-    "africaHelpApp": {
+    "uwHelpApp": {
       "service": "Cognito",
       "providerPlugin": "awscloudformation",
       "dependsOn": [],
@@ -35,13 +35,13 @@
     }
   },
   "api": {
-    "africaHelpAppApi": {
+    "uwHelpAppApi": {
       "service": "AppSync",
       "providerPlugin": "awscloudformation",
       "dependsOn": [
         {
           "category": "auth",
-          "resourceName": "africaHelpApp",
+          "resourceName": "uwHelpApp",
           "attributes": [
             "UserPoolId"
           ]
@@ -52,7 +52,7 @@
           "defaultAuthentication": {
             "authenticationType": "AMAZON_COGNITO_USER_POOLS",
             "userPoolConfig": {
-              "userPoolId": "authafricaHelpApp"
+              "userPoolId": "authuwHelpApp"
             }
           },
           "additionalAuthenticationProviders": [
@@ -96,7 +96,7 @@
       "dependsOn": [
         {
           "category": "auth",
-          "resourceName": "africaHelpApp",
+          "resourceName": "uwHelpApp",
           "attributes": [
             "UserPoolId"
           ]
