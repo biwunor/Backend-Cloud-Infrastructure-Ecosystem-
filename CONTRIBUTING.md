@@ -31,12 +31,12 @@ This project and everyone participating in it is governed by our [Code of Conduc
 1. Fork the repository on GitHub
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/your-username/africa-help-app.git
-   cd africa-help-app
+   git clone [https://github.com/biwunor/Backend-Cloud-Infrastructure-Ecosystem-.git]
+   cd Backend-Cloud-Infrastructure-Ecosystem-
    ```
 3. Add the original repository as an upstream remote:
    ```bash
-   git remote add upstream https://github.com/original-org/africa-help-app.git
+   git remote add upstream https://github.com/original-org/Backend-Cloud-Infrastructure-Ecosystem-.git
    ```
 4. Install dependencies:
    ```bash
