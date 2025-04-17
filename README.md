@@ -8,7 +8,7 @@
 **Date:** April 16, 2025  
 **Author:** Bonaventure  
 **Project Lead:** Bonaventure  
-**Project ID:** PROYNSMD
+**Project ID:** UW-01
 
 ## Overview
 
@@ -109,8 +109,8 @@ All components run in a secure VPC with public and private subnets, managed thro
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-organization/africa-help-app.git
-   cd africa-help-app
+   git clone https://github.com/biwunor/Backend-Cloud-Infrastructure-Ecosystem-.git
+   cd Backend-Cloud-Infrastructure-Ecosystem-.git
    ```
 
 2. Install dependencies:
@@ -242,7 +242,7 @@ For questions, support, or feedback, please contact:
 
 **Bonaventure**  
 Project Lead  
-Email: proynsmd@example.com  
+Email: biwunor@gmail.com
 
 Africa  
-Nairobi, Kenya
+Awka, Nigeria
