@@ -3,7 +3,7 @@
 **Version:** 1.0.0  
 **Last Updated:** April 16, 2025  
 **Author:** Bonaventure  
-**Project:** Africa Help App - Waste Management Platform
+**Project:** UW Help App - Waste Management Platform
 
 ## Overview
 
