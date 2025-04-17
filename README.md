@@ -110,7 +110,7 @@ All components run in a secure VPC with public and private subnets, managed thro
 1. Clone the repository:
    ```bash
    git clone https://github.com/biwunor/Backend-Cloud-Infrastructure-Ecosystem-.git
-   cd Backend-Cloud-Infrastructure-Ecosystem-.git
+   cd Backend-Cloud-Infrastructure-Ecosystem-
    ```
 
 2. Install dependencies:
