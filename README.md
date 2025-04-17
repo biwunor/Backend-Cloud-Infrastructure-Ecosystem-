@@ -1,6 +1,6 @@
-# Africa Help App - Waste Management Platform
+# UW Help App - Waste Management Platform
 
-![Africa Help App Logo](generated-icon.png)
+![UW Help App Logo](generated-icon.png)
 
 > A comprehensive waste management platform designed to empower the Africa community through digital sustainability solutions.
 
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The Africa Help App is a cutting-edge waste management platform developed to streamline and enhance sustainability efforts across Africa. This platform leverages modern cloud technology, containerized architecture, and location-based services to provide an intuitive and efficient waste disposal and tracking system for the African community.
+The UW Help App is a cutting-edge waste management platform developed to streamline and enhance sustainability efforts across Africa. This platform leverages modern cloud technology, containerized architecture, and location-based services to provide an intuitive and efficient waste disposal and tracking system for the African community.
 
 ## Key Features
 
